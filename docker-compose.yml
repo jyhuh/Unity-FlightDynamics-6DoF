@@ -1,0 +1,57 @@
+# Licensed under the Apache License, Version 2.0.
+# 2-Container Stack for Colima (containerd / nerdctl compose):
+#   1. unity-ros2-dds : ROS 2 Humble + eProsima Micro-XRCE-DDS Agent (UDP 8888)
+#   2. unity-px4-sitl : Independent PX4-Autopilot v1.15 SITL (TCP 4560 -> macOS Unity)
+
+services:
+  ros2:
+    build:
+      context: ./docker/ros2
+      dockerfile: Dockerfile
+    image: flightdynamics6dof/ros2-humble:latest
+    container_name: unity-ros2-dds
+    hostname: ros2
+    stdin_open: true
+    tty: true
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - UXRCE_DDS_PORT=8888
+    ports:
+      - "8888:8888/udp"
+    networks:
+      - flightdynamics-net
+    restart: unless-stopped
+
+  px4-sitl:
+    build:
+      context: ./docker/px4-sitl
+      dockerfile: Dockerfile
+    image: flightdynamics6dof/px4-sitl:latest
+    container_name: unity-px4-sitl
+    hostname: px4-sitl
+    depends_on:
+      - ros2
+    stdin_open: true
+    tty: true
+    environment:
+      - PX4_SIM_MODEL=${PX4_SIM_MODEL:-iris}
+      - PX4_SIMULATOR=none
+      - PX4_SIM_HOSTNAME=host.lima.internal
+      - PX4_UXRCE_DDS_HOST=ros2
+      - PX4_UXRCE_DDS_PORT=8888
+      - PX4_HOME_LAT=${PX4_HOME_LAT:-37.5665000}
+      - PX4_HOME_LON=${PX4_HOME_LON:-126.9780000}
+      - PX4_HOME_ALT=${PX4_HOME_ALT:-35.0}
+    volumes:
+      - ./PX4-Autopilot:/workspace/PX4-Autopilot
+      - ./docker/config:/workspace/config
+    ports:
+      - "14580:14580/udp"
+      - "18570:18570/udp"
+    networks:
+      - flightdynamics-net
+    restart: unless-stopped
+
+networks:
+  flightdynamics-net:
+    driver: bridge

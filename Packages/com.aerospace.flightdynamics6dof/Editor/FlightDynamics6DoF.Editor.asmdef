@@ -1,0 +1,20 @@
+{
+  "name": "FlightDynamics6DoF.Editor",
+  "rootNamespace": "FlightDynamics6DoF.Editor",
+  "references": [
+    "FlightDynamics6DoF.Unity"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "FlightDynamics6DoF.Core.dll"
+  ],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

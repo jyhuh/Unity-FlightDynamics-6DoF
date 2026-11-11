@@ -1,0 +1,427 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>FlightDynamics6DoF.Core</name>
+    </assembly>
+    <members>
+        <member name="T:FlightDynamics6DoF.Core.Gnc.CascadedFlightController">
+            <summary>
+            Built-in Cascaded Nonlinear SO(3) / Quaternion Attitude &amp; PID Position Flight Controller.
+            Allows standalone autonomous flight and direct QGroundControl mission execution without requiring external Linux PX4 SITL.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Gnc.CascadedFlightController.ComputeControlStep(System.Double,FlightDynamics6DoF.Core.Specs.AircraftConfigSpec,FlightDynamics6DoF.Core.Specs.BakedAeroDatabase,FlightDynamics6DoF.Core.Dynamics.SixDofState,System.Span{System.Double})">
+            <summary>
+            Executes one control step and writes the 16 normalized actuator commands into <paramref name="outControls16"/>.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Gnc.WrenchControlAllocator">
+            <summary>
+            Universal Pseudoinverse Wrench Control Allocator (Actuator Mixer) and PX4 v1.14+ Control Allocation Parameter Exporter.
+            Automatically maps 6-DOF control wrench commands (Roll, Pitch, Yaw moments + Collective/Forward Thrust)
+            to arbitrary Multirotor, Fixed-Wing, Tilt-Rotor, and QuadPlane VTOL actuator channels.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Gnc.WrenchControlAllocator.AllocateActuators(FlightDynamics6DoF.Core.Specs.AircraftConfigSpec,FlightDynamics6DoF.Core.Specs.BakedAeroDatabase,FlightDynamics6DoF.Core.Math.Vec3d,System.Double,System.Double,System.Double,System.Span{System.Double})">
+            <summary>
+            Allocates desired body moments [Nm], upward collective thrust [N], and forward cruise throttle [0..1]
+            into the 16 normalized actuator channels.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Gnc.WrenchControlAllocator.GeneratePx4AirframeParameterScript(FlightDynamics6DoF.Core.Specs.AircraftConfigSpec,FlightDynamics6DoF.Core.Specs.BakedAeroDatabase)">
+            <summary>
+            Generates a PX4 v1.14+ Control Allocation &amp; Airframe startup parameter script (.params / shell format)
+            directly from the C# <see cref="T:FlightDynamics6DoF.Core.Specs.AircraftConfigSpec"/> and <see cref="T:FlightDynamics6DoF.Core.Specs.BakedAeroDatabase"/> (replacing external Python tools).
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Sensors.VirtualSensorSuite">
+            <summary>
+            Simulates aerospace sensors (IMU Specific Force + Gyro with Gaussian White Noise &amp; Bias Random Walk,
+            WGS84 GPS, ISA Barometer, 3-axis Magnetometer, and AGL Rangefinder) feeding PX4/ArduPilot SITL and Internal GNC.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Dynamics.MultiFidelitySixDofEngine">
+            <summary>
+            Stage 2: Real-Time Multi-Fidelity Nonlinear 6-DOF Flight Dynamics Engine.
+            Supports seamless runtime switching between Level 0 (Unity Rigidbody Force Provider),
+            Level 1 (RK4 6-DOF + Pre-baked Surrogate Derivatives),
+            Level 2 (RK4 6-DOF + Real-time CCBlade BEMT &amp; Nonlinear Lifting-Line Strips),
+            and Level 3 (RK4 6-DOF + Real-time 3D VLM Vortex Wake &amp; Rotor Slipstream Coupling + Dryden Turbulence).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Dynamics.MultiFidelitySixDofEngine.SetActuatorControls(System.ReadOnlySpan{System.Double})">
+            <summary>
+            Sets normalized actuator commands (16 channels: [0..1] for motors/throttles, [-1..+1] for control surfaces).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Dynamics.MultiFidelitySixDofEngine.StepSimulation(System.Double,System.Double)">
+            <summary>
+            Advances the simulation by <paramref name="dt"/> seconds using the active <see cref="P:FlightDynamics6DoF.Core.Dynamics.MultiFidelitySixDofEngine.FidelityLevel"/>.
+            For Level 1~3, executes high-frequency RK4 sub-stepping (default maxSubStep = 0.0025s = 400Hz).
+            For Level 0, computes lumped forces &amp; torques for Unity's Rigidbody.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Dynamics.MultiFidelitySixDofEngine.EvaluateLevel0UnityRigidbodyWrench(System.Double,FlightDynamics6DoF.Core.Math.Vec3d,FlightDynamics6DoF.Core.Math.Quatd,FlightDynamics6DoF.Core.Math.Vec3d,FlightDynamics6DoF.Core.Math.Vec3d,FlightDynamics6DoF.Core.Math.Vec3d@,FlightDynamics6DoF.Core.Math.Vec3d@)">
+            <summary>
+            Synchronizes internal 6-DOF kinematic state from Unity's Rigidbody when running in <see cref="F:FlightDynamics6DoF.Core.Specs.SimulationFidelityLevel.Level0_UnityRigidbody"/>,
+            and returns the resulting Force and Torque vectors directly in Unity's Left-Handed local coordinates.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Specs.SimulationFidelityLevel">
+            <summary>
+            User-selectable simulation fidelity tiers for Stage 2 (Real-Time Simulation).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.SimulationFidelityLevel.Level0_UnityRigidbody">
+            <summary>
+            Level 0: Uses Unity's native Rigidbody (FixedUpdate) with Stage-1 lumped rotor thrust/torque (kT*w^2, kQ*w^2),
+            bluff body drag, and linearized stability derivatives. Ideal for large drone swarms and lightweight game physics.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.SimulationFidelityLevel.Level1_6DoFSurrogate">
+            <summary>
+            Level 1: High-frequency custom RK4 6-DOF integrator driven by Stage-1 pre-baked aerodynamic lookup tables,
+            stability/damping derivatives, and BEMT advance-ratio curves. Fast and accurate for SITL and RL training.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.SimulationFidelityLevel.Level2_6DoFBladeAndStrip">
+            <summary>
+            Level 2: High-frequency custom RK4 6-DOF integrator with real-time per-rotor CCBlade BEMT (including oblique flow
+            and ground effect), real-time nonlinear lifting-line wing strips (+/-180 deg Viterna + Du-Selig), and slender-body/cross-flow fuselage.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.SimulationFidelityLevel.Level3_6DoFFullAeroWake">
+            <summary>
+            Level 3: Maximum engineering fidelity. Level 2 plus real-time 3D VLM horseshoe vortex downwash/sidewash coupling,
+            contracting rotor slipstream tube interaction on wings/tail (blown-wing transition), and continuous 3-axis Dryden wind turbulence.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Specs.AirfoilSpec">
+            <summary>
+            2D Airfoil section specification using CST (Class-Shape Transformation) weights and geometric parameters.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.AirfoilSpec.CstUpper">
+            <summary>
+            8 Kulfan CST weights for the upper surface (Au_0 .. Au_7).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.AirfoilSpec.CstLower">
+            <summary>
+            8 Kulfan CST weights for the lower surface (Al_0 .. Al_7).
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Specs.WingSurfaceSpec">
+            <summary>
+            3D Lifting surface specification (Main Wing, Horizontal Tail, Vertical Fin, Canard).
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Specs.FuselageSpec">
+            <summary>
+            Fuselage and non-lifting body specification for Slender Body Theory (Multhopp) and Component Build-up parasitic drag.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.FuselageSpec.AxialStationsNormalized">
+            <summary>
+            Axial stations (x/L in [0..1]) and cross-sectional areas S(x) [m^2] for Slender Body destabilizing moment integral.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.FuselageSpec.ProjectedAreasFrd">
+            <summary>
+            Projected frontal/side/planform areas [m^2] in FRD axes for high-alpha / multirotor cross-flow bluff-body drag.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.FuselageSpec.BluffDragCoefficientsFrd">
+            <summary>
+            Empirical bluff-body drag coefficients along FRD axes for separated cross-flow.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.FuselageSpec.MiscDeltaCd0">
+            <summary>
+            Additional miscellaneous parasitic drag delta CD0 (exposed wiring, landing skids, camera gimbal).
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Specs.RotorSpec">
+            <summary>
+            Rotor / Propeller specification for CCBlade BEMT and Slipstream wake interaction.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Specs.SensorSuiteSpec">
+            <summary>
+            Virtual sensor suite parameters (IMU, GPS, Barometer, Magnetometer, Rangefinder).
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Specs.AircraftConfigSpec">
+            <summary>
+            Complete data-driven aircraft configuration supporting Multirotors, Fixed-Wing UAVs, and Hybrid VTOL aircraft.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Specs.AircraftConfigSpec.CreateStandardQuadcopterX">
+            <summary>
+            Factory preset: Standard PX4-numbering Quadcopter X (Front-Right CCW=0, Rear-Left CCW=1, Front-Left CW=2, Rear-Right CW=3).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Specs.AircraftConfigSpec.CreateFixedWingUav">
+            <summary>
+            Factory preset: Fixed-Wing Research UAV (Tractor propeller + Main Wing + Elevator + Rudder).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Specs.AircraftConfigSpec.CreateQuadPlaneVtolMillie">
+            <summary>
+            Factory preset: Hybrid QuadPlane VTOL inspired by McGill Robotics "Millie" architecture
+            (4 vertical lift rotors + 1 forward cruise propeller + Main Wing + H/V Tail).
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Specs.BakedAeroDatabase">
+            <summary>
+            Output of Stage 1 (Pre-Simulation Geometry and Aerodynamic Analysis Pipeline).
+            Feeds Stage 2 (Real-Time Simulation across Level 0 ~ Level 3) and the Engineering Stability Workbench.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Math.Vec3d">
+            <summary>
+            Double-precision 3D vector used across NED (North-East-Down) and FRD (Forward-Right-Down) aerospace frames.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Math.Quatd">
+            <summary>
+            Hamilton unit quaternion (W, X, Y, Z) representing attitude from Body (FRD) to Inertial (NED) frame.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.Quatd.RotateBodyToNed(FlightDynamics6DoF.Core.Math.Vec3d)">
+            <summary>
+            Rotates a vector from the Body (FRD) frame to the Inertial (NED) frame: v_ned = q * v_body * q^-1.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.Quatd.RotateNedToBody(FlightDynamics6DoF.Core.Math.Vec3d)">
+            <summary>
+            Rotates a vector from the Inertial (NED) frame to the Body (FRD) frame: v_body = q^-1 * v_ned * q.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.Quatd.Derivative(FlightDynamics6DoF.Core.Math.Vec3d)">
+            <summary>
+            Computes the time derivative dq/dt = 0.5 * q * [0, omega_body].
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.Quatd.FromEulerZyx(System.Double,System.Double,System.Double)">
+            <summary>
+            Constructs quaternion from aerospace Euler ZYX angles (roll phi, pitch theta, yaw psi in radians).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.Quatd.ToEulerZyx">
+            <summary>
+            Converts quaternion to aerospace Euler ZYX angles (Roll, Pitch, Yaw in radians).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.Quatd.AttitudeErrorBody(FlightDynamics6DoF.Core.Math.Quatd,FlightDynamics6DoF.Core.Math.Quatd)">
+            <summary>
+            Computes SO(3)/Quaternion attitude error vector in body frame from current attitude to desired attitude.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Math.Mat3d">
+            <summary>
+            3x3 double-precision matrix for inertia tensors and linear transformations.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Math.LinearAlgebra">
+            <summary>
+            Dense linear algebra utilities for VLM aerodynamic influence matrices and Pseudoinverse Control Allocation.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.LinearAlgebra.ComputeDampedRightPseudoinverse(System.Double[0:,0:],System.Double)">
+            <summary>
+            Computes damped right Moore-Penrose pseudoinverse A^+ = A^T (A A^T + lambda^2 I)^-1 for m x n matrix (m &lt;= n).
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Math.FrameConverter">
+            <summary>
+            Converts between Aerospace Standard Right-Handed (NED / FRD) frames,
+            Unity Left-Handed (EUN / RUF: X=East/Right, Y=Up, Z=North/Forward) frames,
+            and WGS84 Geodetic coordinates.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.FrameConverter.NedToUnityPosition(FlightDynamics6DoF.Core.Math.Vec3d)">
+            <summary>
+            Converts NED position (North, East, Down) [m] to Unity world position (X=East, Y=Up=-Down, Z=North) [m].
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.FrameConverter.UnityToNedPosition(FlightDynamics6DoF.Core.Math.Vec3d)">
+            <summary>
+            Converts Unity world position (X=East, Y=Up, Z=North) [m] to NED position (North, East, Down) [m].
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.FrameConverter.FrdToUnityVector(FlightDynamics6DoF.Core.Math.Vec3d)">
+            <summary>
+            Converts FRD body vector (Forward, Right, Down) to Unity local body vector (X=Right, Y=Up, Z=Forward).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.FrameConverter.UnityToFrdVector(FlightDynamics6DoF.Core.Math.Vec3d)">
+            <summary>
+            Converts Unity local body vector (X=Right, Y=Up, Z=Forward) to FRD body vector (Forward, Right, Down).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.FrameConverter.FrdToUnityTorque(FlightDynamics6DoF.Core.Math.Vec3d)">
+            <summary>
+            Converts FRD angular velocity / torque (Roll-X, Pitch-Y, Yaw-Z right-handed) to Unity left-handed torque.
+            Due to handedness flip alongside axis permutation, torque in Unity is (-Pitch_FRD, Yaw_FRD, -Roll_FRD).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.FrameConverter.NedToUnityRotation(FlightDynamics6DoF.Core.Math.Quatd)">
+            <summary>
+            Converts Aerospace NED/FRD quaternion to Unity Left-Handed quaternion (X, Y, Z, W).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.FrameConverter.UnityToNedRotation(FlightDynamics6DoF.Core.Math.Quatd)">
+            <summary>
+            Converts Unity Left-Handed rotation quaternion to Aerospace NED/FRD quaternion.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.FrameConverter.NedToWgs84(FlightDynamics6DoF.Core.Math.Vec3d,System.Double,System.Double,System.Double)">
+            <summary>
+            Converts local NED offset [m] from a reference WGS84 origin (lat0, lon0, alt0) to WGS84 (Lat [deg], Lon [deg], Alt MSL [m]).
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.FrameConverter.Wgs84ToNed(System.Double,System.Double,System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Converts WGS84 (Lat [deg], Lon [deg], Alt MSL [m]) to local NED position [m] relative to reference origin.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Aerodynamics.StabilityAndTrimAnalyzer">
+            <summary>
+            Module 5 &amp; Stage 1 Pipeline: Full-Aircraft Pre-Simulation Geometry, Aerodynamic, Stability &amp; Trim Analyzer.
+            Executes Modules 1-4 offline/on-demand to build a complete <see cref="T:FlightDynamics6DoF.Core.Specs.BakedAeroDatabase"/> that drives
+            Stage 2 Real-Time Simulation (Level 0 ~ Level 3) and the Unity Editor Engineering Workbench.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Aerodynamics.StabilityAndTrimAnalyzer.EstimateGeometryFromBoundingBox(FlightDynamics6DoF.Core.Specs.AircraftConfigSpec,FlightDynamics6DoF.Core.Math.Vec3d,System.Double)">
+            <summary>
+            Estimates aircraft mass, inertia tensor, reference areas, and bluff drag parameters from a 3D mesh bounding box
+            when a user imports an arbitrary 3D drone or aircraft model.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Aerodynamics.StabilityAndTrimAnalyzer.AnalyzeAndBake(FlightDynamics6DoF.Core.Specs.AircraftConfigSpec)">
+            <summary>
+            Runs the complete Stage 1 Pre-Simulation Analysis Pipeline on <paramref name="config"/>
+            and returns the baked aerodynamic, propulsion, stability, trim, and control-allocation database.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Aerodynamics.AirfoilPolarSolver">
+            <summary>
+            Module 1: 2D Airfoil Viscous Solver and Full-Range (-180..+180 deg) Extrapolator.
+            Combines Kulfan CST geometry parameterization, NeuralFoil-style PINN boundary-layer viscous inference,
+            Prandtl-Glauert subsonic compressibility (M &lt; 0.7), AirfoilPrep Viterna high-alpha extrapolation,
+            and Du-Selig 3D rotational stall delay for rotor blades.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Aerodynamics.AirfoilPolarSolver.Evaluate(FlightDynamics6DoF.Core.Specs.AirfoilSpec,System.Double,System.Double,System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Evaluates 2D airfoil aerodynamic coefficients (Cl, Cd, Cm) and boundary-layer transition locations
+            for any angle of attack in [-pi, +pi] radians.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Aerodynamics.AirfoilPolarSolver.EvaluateRotatingBladeSection(FlightDynamics6DoF.Core.Specs.AirfoilSpec,System.Double,System.Double,System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Applies Du-Selig 3D rotational stall delay correction for rotating propeller/rotor blades.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Aerodynamics.VlmAndLiftingLineSolver">
+            <summary>
+            Module 2: 3D Multi-Lifting-Surface Vortex Lattice Method (VLM) and Nonlinear Lifting-Line Strip Solver.
+            Computes Biot-Savart horseshoe vortex downwash/sidewash across Main Wing, Horizontal Tail, Vertical Fin, and Canard,
+            couples with Module 1's 2D viscous polar (+/-180 deg Viterna), and superimposes Module 4's rotor slipstream wake.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Aerodynamics.VlmAndLiftingLineSolver._0xE830E396A3(FlightDynamics6DoF.Core.Math.Vec3d,FlightDynamics6DoF.Core.Math.Vec3d,FlightDynamics6DoF.Core.Math.Vec3d,FlightDynamics6DoF.Core.Math.Vec3d,System.Boolean)">
+            <summary>
+            Evaluates velocity induced at point P by a unit-circulation horseshoe vortex (bound segment A->B plus semi-infinite trailing legs along wakeDir).
+            Uses finite-core Vatistas regularization to prevent numerical singularities.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Aerodynamics.FuselageAndParasiticSolver">
+            <summary>
+            Module 3: Fuselage and Non-Lifting Body Aerodynamic Solver.
+            Combines Multhopp Slender Body Theory (dS/dx destabilizing pitching/yawing moment),
+            Component Build-up parasitic drag (Cf * FF * Q * Swet / Sref),
+            and High-Alpha Cross-Flow Principle bluff-body drag for multirotors and deep-stall flight.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Aerodynamics.CcBladeBemtSolver">
+            <summary>
+            Module 4: Guaranteed-Convergence Blade Element Momentum Theory (CCBlade formulation)
+            with Prandtl tip/hub loss, Glauert/Buhl turbulent wake correction, edgewise oblique flow,
+            Cheeseman-Bennett ground effect, and contracting slipstream tube wake velocity coupling.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Aerodynamics.CcBladeBemtSolver.ComputeSlipstreamInducedVelocityFrd(FlightDynamics6DoF.Core.Specs.RotorSpec,FlightDynamics6DoF.Core.Aerodynamics.RotorBemtSolution,FlightDynamics6DoF.Core.Math.Vec3d,System.Double)">
+            <summary>
+            Computes the velocity vector induced in the Body (FRD) frame at an arbitrary query point (e.g. wing panel or tail)
+            by a rotor's contracting slipstream tube (FLOWUnsteady / Momentum Slipstream Contraction model).
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Aerodynamics.IsaAtmosphereAndTurbulence">
+            <summary>
+            International Standard Atmosphere (ISA) calculator and 3-axis continuous Dryden Wind Turbulence generator.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Aerodynamics.IsaAtmosphereAndTurbulence.StepDrydenTurbulenceBody(System.Double,System.Double,System.Double,System.Double)">
+            <summary>
+            Steps the 3-axis continuous Dryden turbulence filter (MIL-F-8785C low-altitude scale lengths)
+            and returns the gust velocity vector in the Body (FRD) frame [m/s].
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Mavlink.MavlinkV2Codec">
+            <summary>
+            Zero-dependency MAVLink v2 serializer, X.25 CRC-16-CCITT calculator, and streaming byte parser
+            for PX4 / ArduPilot SITL Lockstep HIL (TCP 4560 / UDP) and GCS telemetry.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Mavlink.MavlinkV2Codec.GetCrcExtra(System.UInt32)">
+            <summary>
+            Official MAVLink CRC_EXTRA bytes per message ID.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Mavlink.MavlinkV2Codec.EncodeFrame(System.UInt32,System.Byte,System.Byte,System.Byte,System.ReadOnlySpan{System.Byte},System.Span{System.Byte})">
+            <summary>
+            Frames a MAVLink v2 packet into <paramref name="outBuffer"/> and returns the total wire length in bytes.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Mavlink.MavlinkV2Codec.PackHilStateQuaternion(System.Byte,System.Byte,System.Byte,System.UInt64,FlightDynamics6DoF.Core.Dynamics.SixDofState,System.Double,System.Double,System.Double,System.Span{System.Byte})">
+            <summary>
+            Packs HIL_STATE_QUATERNION (#115, 64 bytes) providing PX4 SITL with ground-truth attitude, rates, position, and velocity.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Mavlink.MavlinkV2StreamParser">
+            <summary>
+            Streaming byte parser for MAVLink v2 frames.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Mavlink.MavlinkBridgeMode.ExternalSitlHil">
+            <summary>
+            Connects to external PX4 or ArduPilot SITL (sends HIL_SENSOR / HIL_GPS, receives HIL_ACTUATOR_CONTROLS).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Mavlink.MavlinkBridgeMode.DirectGcsAutopilot">
+            <summary>
+            Standalone Autopilot mode: connects directly to QGroundControl or Mission Planner over UDP (14550),
+            streaming telemetry and accepting Arm/Disarm, Mode, Parameter, and Mission Waypoint uploads into the built-in GNC.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Mavlink.MavlinkSimulationBridge">
+            <summary>
+            Transport-agnostic MAVLink v2 Protocol Engine bridging <see cref="T:FlightDynamics6DoF.Core.Dynamics.MultiFidelitySixDofEngine"/>,
+            <see cref="T:FlightDynamics6DoF.Core.Sensors.VirtualSensorSuite"/>, and <see cref="T:FlightDynamics6DoF.Core.Gnc.CascadedFlightController"/> with PX4/ArduPilot SITL or QGroundControl.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Mavlink.MavlinkSimulationBridge.ProcessIncomingBytes(System.ReadOnlySpan{System.Byte},FlightDynamics6DoF.Core.Dynamics.MultiFidelitySixDofEngine,FlightDynamics6DoF.Core.Gnc.CascadedFlightController,System.Action{System.ReadOnlyMemory{System.Byte}})">
+            <summary>
+            Processes incoming raw network bytes (from UDP or TCP socket) and updates either the SITL actuator controls
+            or the built-in <see cref="T:FlightDynamics6DoF.Core.Gnc.CascadedFlightController"/> state, writing any immediate reply packets to <paramref name="sendCallback"/>.
+            </summary>
+        </member>
+        <member name="M:FlightDynamics6DoF.Core.Mavlink.MavlinkSimulationBridge.StepOutboundTelemetry(FlightDynamics6DoF.Core.Dynamics.MultiFidelitySixDofEngine,FlightDynamics6DoF.Core.Sensors.VirtualSensorReadings,FlightDynamics6DoF.Core.Gnc.CascadedFlightController,System.Action{System.ReadOnlyMemory{System.Byte}})">
+            <summary>
+            Generates outbound MAVLink v2 packets for the current simulation step and invokes <paramref name="sendCallback"/>.
+            </summary>
+        </member>
+    </members>
+</doc>

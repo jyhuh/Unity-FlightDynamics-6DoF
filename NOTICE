@@ -1,0 +1,35 @@
+FlightDynamics 6-DOF: Nonlinear UAV/VTOL FDM, Aerodynamic Analyzer & MAVLink Engineering Suite
+Copyright 2026 FlightDynamics 6-DOF Project
+
+This product includes clean-room C# (.NET Standard 2.1) implementations of aerodynamic, flight dynamics,
+and control mathematical formulations inspired by and compatible with the following permissive
+(Apache 2.0 / MIT / BSD) open-source projects and scientific literature.
+No GPL/LGPL (XFOIL, AVL, QPROP, XFLR5, OpenFOAM) code or binaries are linked or included.
+
+1. AirfoilPrep (NREL / Windward Engineering)
+   - License: Apache License 2.0
+   - Reference Role: Viterna +/-180 deg high-angle-of-attack extrapolation and Du-Selig 3D rotational stall delay corrections.
+
+2. NeuralFoil & AeroSandbox (Peter Sharpe / MIT Department of Aeronautics and Astronautics)
+   - License: MIT License
+   - Reference Role: CST (Class-Shape Transformation) airfoil parameterization, PINN-inspired viscous polar inference architecture, 3D Vortex Lattice Method (VLM), and Slender Body / Component Build-up parasitic drag estimation.
+
+3. MachUpX (USU AeroLab)
+   - License: MIT License
+   - Reference Role: Numerical Nonlinear Lifting-Line / multi-lifting-surface aerodynamic coupling and control surface deflection modeling.
+
+4. CCBlade (FLOW Lab, Brigham Young University)
+   - License: MIT License
+   - Reference Role: Guaranteed-convergence Blade Element Momentum Theory (BEMT) parameterized by inflow angle phi, with Prandtl tip/hub loss and Glauert/Buhl high-thrust corrections.
+
+5. FLOWUnsteady (FLOW Lab, Brigham Young University)
+   - License: MIT License
+   - Reference Role: Rotor wake slipstream contraction and rotor-wing aerodynamic interaction formulations for eVTOL / hybrid VTOL transition flight.
+
+6. mcgill-robotics/drone-SW-Unity-Sim (McGill Robotics)
+   - License: MIT License
+   - Reference Role: Modular data-driven vehicle specification concepts and PX4 SITL HIL / Airframe parameter generation concepts.
+
+7. MAVLink v2 Protocol Specification
+   - License: MIT License
+   - Reference Role: Standard MAVLink v2 wire frame format and common message definitions.

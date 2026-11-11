@@ -1,0 +1,16 @@
+{
+  "name": "FlightDynamics6DoF.Unity",
+  "rootNamespace": "FlightDynamics6DoF.Unity",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "FlightDynamics6DoF.Core.dll"
+  ],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
