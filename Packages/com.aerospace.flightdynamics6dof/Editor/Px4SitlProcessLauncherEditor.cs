@@ -32,6 +32,13 @@ namespace FlightDynamics6DoF.Editor
             EditorGUILayout.LabelField("Status", launcher.IsPx4ProcessRunning ? "RUNNING (Containers Active)" : "STOPPED / STANDBY");
             EditorGUILayout.LabelField("Active Airframe", launcher.Px4AirframeModel);
             EditorGUILayout.LabelField("Console Output", launcher.LastConsoleSummary, EditorStyles.wordWrappedMiniLabel);
+
+            GUI.backgroundColor = new Color(0.6f, 0.9f, 1f);
+            if (GUILayout.Button("Open Dedicated Container & VM Manager Window", GUILayout.Height(24)))
+            {
+                Px4ContainerManagerWindow.ShowWindow();
+            }
+            GUI.backgroundColor = Color.white;
             EditorGUILayout.EndVertical();
 
             EditorGUILayout.Space(4);

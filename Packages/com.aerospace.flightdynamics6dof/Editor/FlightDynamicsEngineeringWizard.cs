@@ -274,6 +274,13 @@ namespace FlightDynamics6DoF.Editor
                 }
             }
 
+            GUI.backgroundColor = new Color(0.6f, 0.9f, 1f);
+            if (GUILayout.Button("Open Non-Docker Container & VM Manager Window", GUILayout.Height(28)))
+            {
+                Px4ContainerManagerWindow.ShowWindow();
+            }
+            GUI.backgroundColor = Color.white;
+
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Export Aircraft Spec to JSON"))
             {

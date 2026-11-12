@@ -251,6 +251,21 @@ case "$ACTION" in
     fi
     ;;
 
+  restart)
+    echo "[Restarting] Stopping and restarting containers for model '${MODEL}'..."
+    "$0" down
+    "$0" up "$MODEL"
+    ;;
+
+  ps|status)
+    echo "[Container Status (${BACKEND})]"
+    if [[ "$BACKEND" == "apple" ]]; then
+      container ps -a 2>&1 || true
+    else
+      nerdctl_cmd ps -a 2>&1 || true
+    fi
+    ;;
+
   vm-start)
     if [[ "$BACKEND" == "apple" ]]; then
       ensure_apple_container
