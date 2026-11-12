@@ -413,6 +413,10 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                     return (p.IsRightHalf ? -1.0 : 1.0) * cmd * p.MaxDeflectionRad;
                 }
                 case ControlSurfaceType.Elevator:
+                    // Standard aerospace & PX4 convention for horizontal tail elevator:
+                    // Positive pitch command (+cmd from PX4 PWM_MAIN_FUNC8 / stick back) deflects elevator UP (trailing edge up, -Cl tail),
+                    // producing tail downforce and positive Nose-Up pitching moment (+My)
+                    return -cmd * p.MaxDeflectionRad;
                 case ControlSurfaceType.Flap:
                 case ControlSurfaceType.Rudder:
                 case ControlSurfaceType.Elevon:

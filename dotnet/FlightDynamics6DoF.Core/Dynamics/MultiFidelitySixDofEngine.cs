@@ -329,12 +329,18 @@ namespace FlightDynamics6DoF.Core.Dynamics
                         // Landing gear attitude constraints during takeoff ground roll:
                         Vec3d euler = State.AttitudeBodyToNed.ToEulerZyx();
 
-                        // 1. Prevent nose gear penetration below runway (euler.Y > 0.015 rad is nose-down into ground in aerospace FRD)
-                        // while allowing takeoff rotation (euler.Y < 0 is nose-up)
+                        // 1. Prevent nose gear penetration below runway (euler.Y < -0.015 rad is nose-down into runway)
+                        // while allowing free takeoff rotation (euler.Y > 0 is nose-up rotation into the air)
                         double wy = State.AngularVelocityBodyFrd.Y;
-                        if (euler.Y > GroundContactConstants.NoseGearPitchDownLimitRad && wy > 0.0)
+                        double pitchFloor = -GroundContactConstants.NoseGearPitchDownLimitRad;
+                        if (euler.Y < pitchFloor)
                         {
-                            wy = 0.0;
+                            euler = new Vec3d(euler.X, pitchFloor, euler.Z);
+                            State.AttitudeBodyToNed = Quatd.FromEulerZyx(euler.X, pitchFloor, euler.Z);
+                            if (wy < 0.0)
+                            {
+                                wy = 0.0;
+                            }
                         }
 
                         // 2. Prevent wingtip strike and lateral rollover: main wheels firmly restrict roll angle on runway
@@ -453,10 +459,10 @@ namespace FlightDynamics6DoF.Core.Dynamics
                     double cRoll = _config.MassKg * GroundContactConstants.GearRollDampingRatePerKg;
                     double mRoll = -kRoll * eulerContact.X - cRoll * omegaBodyFrd.X;
 
-                    // Nose gear prevents nose-down pitch penetration into runway while allowing rotation
+                    // Nose gear prevents nose-down pitch penetration into runway while allowing rotation (euler.Y > 0 is nose-up)
                     double kPitch = _config.MassKg * GroundContactConstants.NoseGearPitchRestoringStiffnessPerKg;
                     double cPitch = _config.MassKg * GroundContactConstants.NoseGearPitchDampingRatePerKg;
-                    double mPitch = -cPitch * omegaBodyFrd.Y - (eulerContact.Y > 0.0 ? kPitch * eulerContact.Y : 0.0);
+                    double mPitch = -cPitch * omegaBodyFrd.Y + (eulerContact.Y < 0.0 ? -kPitch * eulerContact.Y : 0.0);
 
                     // Directional tire stability and yaw damping along runway
                     double mYaw = -omegaBodyFrd.Z * (_config.MassKg * 2.5);
