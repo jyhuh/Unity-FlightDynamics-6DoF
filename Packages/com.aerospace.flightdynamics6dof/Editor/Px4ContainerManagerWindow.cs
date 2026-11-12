@@ -2,9 +2,11 @@
 #nullable enable
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 using FlightDynamics6DoF.Core.Specs;
@@ -14,8 +16,20 @@ using Debug = UnityEngine.Debug;
 namespace FlightDynamics6DoF.Editor
 {
     /// <summary>
-    /// Dedicated Unity EditorWindow for complete lifecycle management of the
-    /// non-Docker container stack (PX4 SITL `unity-px4-sitl` and ROS 2 Humble `unity-ros2-dds`),
+    /// Holds parsed inspection status for an individual container (e.g., `unity-px4-sitl`, `unity-ros2-dds`).
+    /// </summary>
+    public class ContainerStateInfo
+    {
+        public string Name = "";
+        public string RawStatus = "STOPPED";
+        public string Image = "";
+        public string Ports = "";
+        public bool IsRunning => !string.IsNullOrEmpty(RawStatus) && RawStatus.StartsWith("Up", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Dedicated Unity EditorWindow for complete lifecycle management and live state monitoring
+    /// of the non-Docker container stack (PX4 SITL `unity-px4-sitl` and ROS 2 Humble `unity-ros2-dds`),
     /// Colima macOS virtual machine, and internal systemd `containerd.service` runtime daemon.
     /// Accessible via menu: Tools > FlightDynamics 6-DOF > Container &amp; VM Manager
     /// </summary>
@@ -31,14 +45,25 @@ namespace FlightDynamics6DoF.Editor
         private Vector2 _consoleScrollPos;
         private bool _autoScrollConsole = true;
 
+        private bool _foldStatusDashboard = true;
         private bool _foldLifecycle = true;
         private bool _foldVmRuntime = true;
         private bool _foldPxh = true;
         private bool _foldRos2 = false;
         private bool _foldConsole = true;
 
+        // Container & VM Live Status Cache
+        private string _vmStatus = "UNKNOWN"; // RUNNING, STOPPED, UNKNOWN
+        private string _containerdStatus = "UNKNOWN"; // ACTIVE, DEGRADED, INACTIVE, UNKNOWN
+        private readonly Dictionary<string, ContainerStateInfo> _containers = new Dictionary<string, ContainerStateInfo>(StringComparer.OrdinalIgnoreCase);
+        private double _lastStatusQueryTime;
+        private bool _isQueryingStatus = false;
+        private bool _autoRefreshStatus = true;
+        private const double RefreshIntervalSeconds = 3.5;
+
         private static readonly StringBuilder _consoleLogBuffer = new StringBuilder();
         private static readonly ConcurrentQueue<string> _pendingLogLines = new ConcurrentQueue<string>();
+        private static readonly ConcurrentQueue<Action> _mainThreadActions = new ConcurrentQueue<Action>();
         private static string _lastStatusSummary = "Ready";
         private static bool _isOperationRunning = false;
 
@@ -47,13 +72,14 @@ namespace FlightDynamics6DoF.Editor
         public static void ShowWindow()
         {
             var win = GetWindow<Px4ContainerManagerWindow>("Container & VM Manager");
-            win.minSize = new Vector2(580, 680);
+            win.minSize = new Vector2(620, 720);
             win.Show();
         }
 
         private void OnEnable()
         {
             EditorApplication.update += HandleEditorUpdate;
+            TriggerAsyncStatusQuery();
         }
 
         private void OnDisable()
@@ -63,6 +89,12 @@ namespace FlightDynamics6DoF.Editor
 
         private void HandleEditorUpdate()
         {
+            // Run queued main-thread actions
+            while (_mainThreadActions.TryDequeue(out var action))
+            {
+                action?.Invoke();
+            }
+
             bool hasNewLogs = false;
             while (_pendingLogLines.TryDequeue(out string? line))
             {
@@ -71,6 +103,15 @@ namespace FlightDynamics6DoF.Editor
                     _consoleLogBuffer.AppendLine(line);
                     _lastStatusSummary = line;
                     hasNewLogs = true;
+                }
+            }
+
+            // Periodic auto status polling
+            if (_autoRefreshStatus && !_isOperationRunning && !_isQueryingStatus)
+            {
+                if (EditorApplication.timeSinceStartup - _lastStatusQueryTime >= RefreshIntervalSeconds)
+                {
+                    TriggerAsyncStatusQuery();
                 }
             }
 
@@ -111,11 +152,108 @@ namespace FlightDynamics6DoF.Editor
             };
         }
 
+        private void TriggerAsyncStatusQuery()
+        {
+            if (_isQueryingStatus) return;
+            _isQueryingStatus = true;
+            _lastStatusQueryTime = EditorApplication.timeSinceStartup;
+
+            string scriptPath = GetManagerScriptPath();
+            string wsRoot = GetWorkspaceRoot();
+            string envPrefix = GetBackendEnvPrefix();
+
+            Task.Run(() =>
+            {
+                string newVmStatus = "STOPPED";
+                string newContainerdStatus = "INACTIVE";
+                var newContainers = new Dictionary<string, ContainerStateInfo>(StringComparer.OrdinalIgnoreCase);
+
+                try
+                {
+                    if (File.Exists(scriptPath))
+                    {
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = "/bin/bash",
+                            Arguments = $"-lc \"{envPrefix}'{scriptPath}' status-info\"",
+                            WorkingDirectory = wsRoot,
+                            UseShellExecute = false,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            CreateNoWindow = true
+                        };
+
+                        using var proc = Process.Start(psi);
+                        if (proc != null)
+                        {
+                            string output = proc.StandardOutput.ReadToEnd();
+                            proc.WaitForExit(3000);
+
+                            using var reader = new StringReader(output);
+                            string? line;
+                            while ((line = reader.ReadLine()) != null)
+                            {
+                                line = line.Trim();
+                                if (line.StartsWith("VM_STATUS="))
+                                {
+                                    newVmStatus = line.Substring("VM_STATUS=".Length).Trim();
+                                }
+                                else if (line.StartsWith("CONTAINERD_STATUS="))
+                                {
+                                    newContainerdStatus = line.Substring("CONTAINERD_STATUS=".Length).Trim();
+                                }
+                                else if (line.Contains("|"))
+                                {
+                                    string[] parts = line.Split('|');
+                                    if (parts.Length >= 2)
+                                    {
+                                        string name = parts[0].Trim();
+                                        if (!string.IsNullOrEmpty(name))
+                                        {
+                                            var info = new ContainerStateInfo
+                                            {
+                                                Name = name,
+                                                RawStatus = parts[1].Trim(),
+                                                Image = parts.Length > 2 ? parts[2].Trim() : "",
+                                                Ports = parts.Length > 3 ? parts[3].Trim() : ""
+                                            };
+                                            newContainers[name] = info;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    newVmStatus = "ERROR";
+                    newContainerdStatus = "ERROR";
+                }
+                finally
+                {
+                    _mainThreadActions.Enqueue(() =>
+                    {
+                        _vmStatus = newVmStatus;
+                        _containerdStatus = newContainerdStatus;
+                        _containers.Clear();
+                        foreach (var kvp in newContainers)
+                            _containers[kvp.Key] = kvp.Value;
+                        _isQueryingStatus = false;
+                        Repaint();
+                    });
+                }
+            });
+        }
+
         private void OnGUI()
         {
             _windowScrollPos = EditorGUILayout.BeginScrollView(_windowScrollPos);
 
             DrawHeaderAndStatusDashboard();
+            EditorGUILayout.Space(6);
+
+            DrawContainerInspectionTable();
             EditorGUILayout.Space(6);
 
             DrawContainerLifecycleSection();
@@ -138,25 +276,158 @@ namespace FlightDynamics6DoF.Editor
         private void DrawHeaderAndStatusDashboard()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("FlightDynamics 6-DOF: Container & VM Manager", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Zero-Docker Apple Silicon Stack: Colima (containerd + nerdctl) / Apple native 'container'", EditorStyles.miniLabel);
-
-            EditorGUILayout.Space(3);
             EditorGUILayout.BeginHorizontal();
-            _backend = (ContainerRuntimeBackend)EditorGUILayout.EnumPopup("Runtime Backend:", _backend);
-            GUI.enabled = !_isOperationRunning;
-            if (GUILayout.Button(_isOperationRunning ? "Running..." : "Check Status", GUILayout.Width(110), GUILayout.Height(20)))
+            GUILayout.Label("FlightDynamics 6-DOF: Container & VM Manager", EditorStyles.boldLabel);
+            GUILayout.FlexibleSpace();
+            _autoRefreshStatus = EditorGUILayout.ToggleLeft("Auto Poll", _autoRefreshStatus, GUILayout.Width(80));
+            GUI.enabled = !_isQueryingStatus;
+            if (GUILayout.Button(_isQueryingStatus ? "Checking..." : "↻ Refresh Status", GUILayout.Width(110), GUILayout.Height(20)))
             {
-                RunScriptAction("vm-status", "Checking Colima VM & container stack status...");
+                TriggerAsyncStatusQuery();
             }
             GUI.enabled = true;
             EditorGUILayout.EndHorizontal();
 
+            EditorGUILayout.LabelField("Zero-Docker macOS Runtime: Colima (containerd + nerdctl) / Apple native 'container'", EditorStyles.miniLabel);
+
+            EditorGUILayout.Space(4);
+
+            // 4-Card Quick Status Overview
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Last Output:", _lastStatusSummary, EditorStyles.wordWrappedMiniLabel);
+
+            // 1. Colima VM Status Card
+            bool vmRunning = _vmStatus.Equals("RUNNING", StringComparison.OrdinalIgnoreCase);
+            DrawStatusCard("Colima macOS VM", vmRunning ? "RUNNING" : _vmStatus, vmRunning ? new Color(0.2f, 0.8f, 0.3f) : new Color(0.9f, 0.3f, 0.3f));
+
+            // 2. containerd Daemon Card
+            bool cdActive = _containerdStatus.Equals("ACTIVE", StringComparison.OrdinalIgnoreCase);
+            Color cdCol = cdActive ? new Color(0.2f, 0.8f, 0.3f) : (_containerdStatus.Equals("DEGRADED", StringComparison.OrdinalIgnoreCase) ? new Color(1f, 0.7f, 0.2f) : new Color(0.9f, 0.3f, 0.3f));
+            DrawStatusCard("containerd Daemon", _containerdStatus, cdCol);
+
+            // 3. unity-px4-sitl Container Card
+            bool px4Running = _containers.TryGetValue("unity-px4-sitl", out var px4Info) && px4Info.IsRunning;
+            DrawStatusCard("unity-px4-sitl", px4Running ? "UP (TCP :4560)" : "STOPPED", px4Running ? new Color(0.2f, 0.8f, 0.3f) : new Color(0.8f, 0.4f, 0.4f));
+
+            // 4. unity-ros2-dds Container Card
+            bool ros2Running = _containers.TryGetValue("unity-ros2-dds", out var ros2Info) && ros2Info.IsRunning;
+            DrawStatusCard("unity-ros2-dds", ros2Running ? "UP (UDP :8888)" : "STOPPED", ros2Running ? new Color(0.2f, 0.8f, 0.3f) : new Color(0.8f, 0.4f, 0.4f));
+
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(4);
+            EditorGUILayout.BeginHorizontal();
+            _backend = (ContainerRuntimeBackend)EditorGUILayout.EnumPopup("Runtime Backend:", _backend);
+            EditorGUILayout.LabelField("Model:", _airframeModel, GUILayout.Width(100));
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("Recent Activity:", _lastStatusSummary, EditorStyles.wordWrappedMiniLabel);
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.EndVertical();
+        }
+
+        private static void DrawStatusCard(string title, string statusText, Color statusColor)
+        {
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.MinWidth(135));
+            GUILayout.Label(title, EditorStyles.miniBoldLabel);
+            var prevCol = GUI.contentColor;
+            GUI.contentColor = statusColor;
+            GUILayout.Label($"● {statusText}", EditorStyles.boldLabel);
+            GUI.contentColor = prevCol;
+            EditorGUILayout.EndVertical();
+        }
+
+        private void DrawContainerInspectionTable()
+        {
+            _foldStatusDashboard = EditorGUILayout.Foldout(_foldStatusDashboard, "Live Container Status & Network Bindings", true, EditorStyles.foldoutHeader);
+            if (!_foldStatusDashboard) return;
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // Table Header
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            GUILayout.Label("Container Name", EditorStyles.boldLabel, GUILayout.Width(140));
+            GUILayout.Label("State / Status", EditorStyles.boldLabel, GUILayout.Width(110));
+            GUILayout.Label("Network Ports & Bindings", EditorStyles.boldLabel, GUILayout.ExpandWidth(true));
+            GUILayout.Label("Actions", EditorStyles.boldLabel, GUILayout.Width(120));
+            EditorGUILayout.EndHorizontal();
+
+            // Row 1: unity-px4-sitl
+            _containers.TryGetValue("unity-px4-sitl", out var px4Info);
+            DrawContainerRow(
+                "unity-px4-sitl",
+                px4Info != null && px4Info.IsRunning,
+                px4Info != null ? px4Info.RawStatus : "STOPPED / NOT FOUND",
+                "TCP 4560 (Unity Lockstep HIL) | UDP 14550 (QGC) | UDP 14540 (Offboard)",
+                () => RunScriptAction($"up {_airframeModel}", $"Restarting unity-px4-sitl ({_airframeModel})..."),
+                () => OpenLogsInTerminal()
+            );
+
+            // Row 2: unity-ros2-dds
+            _containers.TryGetValue("unity-ros2-dds", out var ros2Info);
+            DrawContainerRow(
+                "unity-ros2-dds",
+                ros2Info != null && ros2Info.IsRunning,
+                ros2Info != null ? ros2Info.RawStatus : "STOPPED / NOT FOUND",
+                "UDP 8888 (MicroXRCEAgent uORB <-> ROS 2 Humble Topics)",
+                () => RunScriptAction($"up {_airframeModel}", $"Restarting unity-ros2-dds stack..."),
+                () => RunScriptAction("ros2-topics", "Listing active ROS 2 topics...")
+            );
+
+            // Any extra containers discovered via nerdctl ps
+            foreach (var kvp in _containers)
+            {
+                if (kvp.Key.Equals("unity-px4-sitl", StringComparison.OrdinalIgnoreCase) ||
+                    kvp.Key.Equals("unity-ros2-dds", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var c = kvp.Value;
+                DrawContainerRow(
+                    c.Name,
+                    c.IsRunning,
+                    c.RawStatus,
+                    string.IsNullOrEmpty(c.Ports) ? c.Image : c.Ports,
+                    null,
+                    null
+                );
+            }
+
+            EditorGUILayout.EndVertical();
+        }
+
+        private static void DrawContainerRow(string name, bool isRunning, string statusText, string portsText, Action? onPrimaryAction, Action? onSecondaryAction)
+        {
+            EditorGUILayout.BeginHorizontal();
+
+            // Name
+            GUILayout.Label(name, EditorStyles.boldLabel, GUILayout.Width(140));
+
+            // Status Badge
+            var prevBg = GUI.backgroundColor;
+            GUI.backgroundColor = isRunning ? new Color(0.3f, 0.9f, 0.4f) : new Color(0.9f, 0.4f, 0.4f);
+            GUILayout.Box(isRunning ? "RUNNING" : "STOPPED", GUILayout.Width(75), GUILayout.Height(18));
+            GUI.backgroundColor = prevBg;
+
+            GUILayout.Label(statusText, EditorStyles.miniLabel, GUILayout.Width(110));
+
+            // Ports
+            GUILayout.Label(portsText, EditorStyles.miniLabel, GUILayout.ExpandWidth(true));
+
+            // Actions
+            if (onPrimaryAction != null)
+            {
+                if (GUILayout.Button("Restart", EditorStyles.miniButtonLeft, GUILayout.Width(55), GUILayout.Height(18)))
+                    onPrimaryAction();
+            }
+            if (onSecondaryAction != null)
+            {
+                if (GUILayout.Button(name.Contains("ros2") ? "Topics" : "Logs", EditorStyles.miniButtonRight, GUILayout.Width(55), GUILayout.Height(18)))
+                    onSecondaryAction();
+            }
+
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(1);
         }
 
         private void DrawContainerLifecycleSection()
@@ -412,6 +683,8 @@ namespace FlightDynamics6DoF.Editor
             {
                 simMgr.SwitchVehiclePresetLive(category);
             }
+
+            TriggerAsyncStatusQuery();
         }
 
         private void SendPxh(string command)
@@ -460,7 +733,11 @@ namespace FlightDynamics6DoF.Editor
                 if (proc != null)
                 {
                     proc.EnableRaisingEvents = true;
-                    proc.Exited += (_, _) => { _isOperationRunning = false; };
+                    proc.Exited += (_, _) =>
+                    {
+                        _isOperationRunning = false;
+                        TriggerAsyncStatusQuery();
+                    };
                     proc.OutputDataReceived += (_, e) =>
                     {
                         if (!string.IsNullOrEmpty(e.Data)) _pendingLogLines.Enqueue(e.Data);

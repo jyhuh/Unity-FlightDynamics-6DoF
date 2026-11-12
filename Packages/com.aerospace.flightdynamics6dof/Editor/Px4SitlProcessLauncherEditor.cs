@@ -29,9 +29,18 @@ namespace FlightDynamics6DoF.Editor
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             GUILayout.Label("PX4-Autopilot SITL & ROS 2 Container Stack Control", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Status", launcher.IsPx4ProcessRunning ? "RUNNING (Containers Active)" : "STOPPED / STANDBY");
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label("Containers:", EditorStyles.miniLabel, GUILayout.Width(70));
+            var prevBg = GUI.backgroundColor;
+            GUI.backgroundColor = launcher.IsPx4ProcessRunning ? new Color(0.3f, 0.9f, 0.4f) : new Color(0.9f, 0.4f, 0.4f);
+            GUILayout.Box(launcher.IsPx4ProcessRunning ? "● unity-px4-sitl [RUNNING]" : "○ unity-px4-sitl [STOPPED]", GUILayout.Height(20));
+            GUILayout.Box(launcher.IsPx4ProcessRunning ? "● unity-ros2-dds [RUNNING]" : "○ unity-ros2-dds [STOPPED]", GUILayout.Height(20));
+            GUI.backgroundColor = prevBg;
+            EditorGUILayout.EndHorizontal();
+
             EditorGUILayout.LabelField("Active Airframe", launcher.Px4AirframeModel);
-            EditorGUILayout.LabelField("Console Output", launcher.LastConsoleSummary, EditorStyles.wordWrappedMiniLabel);
+            EditorGUILayout.LabelField("Recent Log", launcher.LastConsoleSummary, EditorStyles.wordWrappedMiniLabel);
 
             GUI.backgroundColor = new Color(0.6f, 0.9f, 1f);
             if (GUILayout.Button("Open Dedicated Container & VM Manager Window", GUILayout.Height(24)))

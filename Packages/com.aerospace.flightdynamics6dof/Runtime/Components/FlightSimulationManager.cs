@@ -264,7 +264,8 @@ namespace FlightDynamics6DoF.Unity
 
             if (Px4Launcher != null)
             {
-                GUILayout.Label($"Container ({Px4Launcher.RuntimeBackend}): <i>{Px4Launcher.LastConsoleSummary}</i>");
+                string px4Badge = _guiPx4RunningLatch ? "<color=#44ff66>● RUNNING</color>" : "<color=#ff5555>○ STOPPED</color>";
+                GUILayout.Label($"Containers ({Px4Launcher.RuntimeBackend}): {px4Badge} | <i>{Px4Launcher.LastConsoleSummary}</i>");
                 GUILayout.BeginHorizontal();
                 if (!_guiPx4RunningLatch)
                 {

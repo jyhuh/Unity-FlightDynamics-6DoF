@@ -266,6 +266,32 @@ case "$ACTION" in
     fi
     ;;
 
+  status-info)
+    if [[ "$BACKEND" == "apple" ]]; then
+      if command -v container >/dev/null 2>&1; then
+        echo "VM_STATUS=RUNNING"
+        echo "CONTAINERD_STATUS=ACTIVE"
+      else
+        echo "VM_STATUS=STOPPED"
+        echo "CONTAINERD_STATUS=INACTIVE"
+      fi
+      container ps -a --format "{{.Names}}|{{.Status}}|{{.Image}}|{{.Ports}}" 2>/dev/null || true
+    else
+      if colima status --profile "$COLIMA_PROFILE" 2>&1 | grep -qi "is running"; then
+        echo "VM_STATUS=RUNNING"
+        if colima --profile "$COLIMA_PROFILE" nerdctl -- version >/dev/null 2>&1; then
+          echo "CONTAINERD_STATUS=ACTIVE"
+        else
+          echo "CONTAINERD_STATUS=DEGRADED"
+        fi
+        colima nerdctl -p "$COLIMA_PROFILE" -- ps -a --format "{{.Names}}|{{.Status}}|{{.Image}}|{{.Ports}}" 2>/dev/null || true
+      else
+        echo "VM_STATUS=STOPPED"
+        echo "CONTAINERD_STATUS=INACTIVE"
+      fi
+    fi
+    ;;
+
   vm-start)
     if [[ "$BACKEND" == "apple" ]]; then
       ensure_apple_container
