@@ -272,8 +272,8 @@ namespace FlightDynamics6DoF.Core.Specs
 
         public bool EnableGroundEffect = true;
         public bool EnableBladeFlappingAndRotorDrag = true;
-        public bool EnableDrydenTurbulence = true;
-        public double TurbulenceIntensityMps = 1.2;
+        public bool EnableDrydenTurbulence = false;
+        public double TurbulenceIntensityMps = 0.0;
 
         public double BatteryCells = 4;
         public double BatteryCapacityMah = 5000.0;

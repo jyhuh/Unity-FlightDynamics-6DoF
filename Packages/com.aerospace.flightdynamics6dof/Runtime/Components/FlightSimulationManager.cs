@@ -373,6 +373,36 @@ namespace FlightDynamics6DoF.Unity
             GUILayout.Label($"Static Margin: <b>{(db.StaticMarginFraction * 100.0):F1}% MAC</b> | Neutral Point x_NP: {db.NeutralPointXFrd:F3} m");
             GUILayout.Label($"Derivatives: CL_a={db.CLAlpha:F2}/rad, Cm_a={db.CmAlpha:F3}/rad, Cn_b={db.CnBeta:F3}/rad, CD0={db.CD0:F4}");
 
+            GUILayout.Space(4);
+            GUILayout.Label($"<b>[5. Environmental Wind & Turbulence Control]</b>");
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"Wind: N={MeanWindNedMetersPerSec.x:F1}, E={MeanWindNedMetersPerSec.y:F1} m/s | Gust: {(PrimaryVehicle.ActiveConfig.EnableDrydenTurbulence ? $"{PrimaryVehicle.ActiveConfig.TurbulenceIntensityMps:F1} m/s" : "OFF")}");
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Calm Air (0 m/s)"))
+            {
+                MeanWindNedMetersPerSec = Vector3.zero;
+                eng.MeanWindNed = Vec3d.Zero;
+                PrimaryVehicle.ActiveConfig.EnableDrydenTurbulence = false;
+                PrimaryVehicle.ActiveConfig.TurbulenceIntensityMps = 0.0;
+            }
+            if (GUILayout.Button("Light Breeze (2 m/s)"))
+            {
+                MeanWindNedMetersPerSec = new Vector3(2f, 0f, 0f);
+                eng.MeanWindNed = new Vec3d(2.0, 0.0, 0.0);
+                PrimaryVehicle.ActiveConfig.EnableDrydenTurbulence = true;
+                PrimaryVehicle.ActiveConfig.TurbulenceIntensityMps = 0.5;
+            }
+            if (GUILayout.Button("Moderate Wind (5 m/s)"))
+            {
+                MeanWindNedMetersPerSec = new Vector3(4f, 2f, 0f);
+                eng.MeanWindNed = new Vec3d(4.0, 2.0, 0.0);
+                PrimaryVehicle.ActiveConfig.EnableDrydenTurbulence = true;
+                PrimaryVehicle.ActiveConfig.TurbulenceIntensityMps = 1.2;
+            }
+            GUILayout.EndHorizontal();
+
             // Optional offline fallback test toggle when PX4 is not running
             if (PrimaryMavlinkNode != null && !_guiMavConnectedLatch && PrimaryVehicle.FlightController != null)
             {
