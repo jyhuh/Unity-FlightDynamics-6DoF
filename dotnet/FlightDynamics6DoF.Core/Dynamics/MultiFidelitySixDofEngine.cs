@@ -688,7 +688,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 double prevOmega = State.RotorOmegaRadps[i];
 
                 double newRpm = State.RotorRpm[i] + alphaLag * (targetRpm - State.RotorRpm[i]);
-                double newOmega = newRpm * (2.0 * System.Math.PI / 60.0);
+                double newOmega = newRpm * MathConstants.RpmToRadPerSec;
                 double omegaDot = dt > 1e-6 ? (newOmega - prevOmega) / dt : 0.0;
 
                 State.RotorRpm[i] = newRpm;

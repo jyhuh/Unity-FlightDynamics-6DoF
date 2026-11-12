@@ -143,7 +143,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
         {
             double u1 = 1.0 - _rng.NextDouble();
             double u2 = 1.0 - _rng.NextDouble();
-            return System.Math.Sqrt(-2.0 * System.Math.Log(u1)) * System.Math.Cos(2.0 * System.Math.PI * u2);
+            return System.Math.Sqrt(-2.0 * System.Math.Log(u1)) * System.Math.Cos(MathConstants.TwoPi * u2);
         }
     }
 }

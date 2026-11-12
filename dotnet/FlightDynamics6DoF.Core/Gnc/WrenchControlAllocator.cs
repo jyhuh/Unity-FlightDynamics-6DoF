@@ -37,7 +37,7 @@ namespace FlightDynamics6DoF.Core.Gnc
                 {
                     int rIdx = liftIndices[k];
                     var r = config.Rotors[rIdx];
-                    double maxOmega = r.MaxRpm * (2.0 * System.Math.PI / 60.0);
+                    double maxOmega = r.MaxRpm * MathConstants.RpmToRadPerSec;
                     double kt = (rIdx < db.RotorLumpedKt.Length) ? db.RotorLumpedKt[rIdx] : 1.5e-5;
                     double kq = (rIdx < db.RotorLumpedKq.Length) ? db.RotorLumpedKq[rIdx] : 2.5e-7;
 

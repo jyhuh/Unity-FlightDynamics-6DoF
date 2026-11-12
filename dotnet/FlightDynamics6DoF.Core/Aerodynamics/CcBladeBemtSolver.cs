@@ -42,7 +42,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             bool enableEdgewiseFlapping = true,
             double tiltAngleRad = 0.0)
         {
-            double omega = System.Math.Max(0.0, rpm * (2.0 * System.Math.PI / 60.0));
+            double omega = System.Math.Max(0.0, rpm * MathConstants.RpmToRadPerSec);
             double rTip = System.Math.Max(0.02, rotor.Radius);
             double rHub = System.Math.Clamp(rotor.HubRadius, 0.002, 0.5 * rTip);
             double diameter = 2.0 * rTip;
@@ -330,7 +330,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             double absSin = System.Math.Max(0.02, System.Math.Abs(sinPhi));
             double f = (0.5 * numBlades) * (isTip ? (rEdge - r) / r : (r - rEdge) / rEdge) / absSin;
             f = System.Math.Clamp(f, 0.0, 20.0);
-            return (2.0 / System.Math.PI) * System.Math.Acos(System.Math.Min(1.0, System.Math.Exp(-f)));
+            return MathConstants.TwoOverPi * System.Math.Acos(System.Math.Min(1.0, System.Math.Exp(-f)));
         }
     }
 }

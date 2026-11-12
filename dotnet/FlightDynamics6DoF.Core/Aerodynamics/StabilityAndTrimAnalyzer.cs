@@ -128,7 +128,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                 db.RotorLumpedKq[i] = kq;
 
                 double hoverOmega = System.Math.Sqrt(targetHoverThrustPerRotor / kt);
-                db.RotorHoverRpm[i] = hoverOmega * (60.0 / (2.0 * System.Math.PI));
+                db.RotorHoverRpm[i] = hoverOmega * MathConstants.RadPerSecToRpm;
             }
 
             // Generate Advance Ratio J curve for primary rotor [0 .. 0.85]

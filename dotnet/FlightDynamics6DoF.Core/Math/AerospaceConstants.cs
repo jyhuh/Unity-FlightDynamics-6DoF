@@ -12,6 +12,9 @@ namespace FlightDynamics6DoF.Core.Math
         public const double Rad2Deg = 180.0 / System.Math.PI;
         public const double TwoPi = 2.0 * System.Math.PI;
         public const double HalfPi = System.Math.PI * 0.5;
+        public const double InvPi = 1.0 / System.Math.PI;
+        public const double TwoOverPi = 2.0 / System.Math.PI;
+        public const double InvTwoPi = 1.0 / (2.0 * System.Math.PI);
         public const double InvFourPi = 1.0 / (4.0 * System.Math.PI);
         public const double RpmToRadPerSec = TwoPi / 60.0;
         public const double RadPerSecToRpm = 60.0 / TwoPi;
