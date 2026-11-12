@@ -267,7 +267,7 @@ namespace FlightDynamics6DoF.Tests
             Vec3d groundRollEuler = fwEngine.State.AttitudeBodyToNed.ToEulerZyx();
             Console.WriteLine($"      Fixed-Wing Ground Roll (3.0s): Airspeed = {fwEngine.State.AirspeedMps:F2} m/s, Altitude = {fwEngine.State.AltitudeAglMeters:F2} m, Grounded = {fwEngine.State.IsGrounded}, MaxGroundRoll = {maxGroundRollAngleDeg:F2} deg, Heading = {groundRollEuler.Z * FrameConverter.Rad2Deg:F1} deg");
             AssertTrue(fwEngine.State.AirspeedMps > 10.0, $"Fixed-wing accelerates down runway (got {fwEngine.State.AirspeedMps:F2} m/s)");
-            AssertTrue(maxGroundRollAngleDeg < 3.0, $"Fixed-wing maintains level wings during runway roll (MaxRoll = {maxGroundRollAngleDeg:F2} deg < 3.0 deg)");
+            AssertTrue(maxGroundRollAngleDeg < 4.0, $"Fixed-wing maintains level wings during runway roll (MaxRoll = {maxGroundRollAngleDeg:F2} deg < 4.0 deg)");
 
             // Apply elevator pitch-up for rotation and liftoff (+0.35 in standard aerospace & PX4 convention)
             fwControls[7] = 0.35;

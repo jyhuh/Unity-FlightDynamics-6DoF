@@ -66,14 +66,66 @@ namespace FlightDynamics6DoF.Unity
                 new Vector3(0f, fusDia * 0.20f, fusLen * 0.38f), Quaternion.identity,
                 new Vector3(fusDia * 0.45f, fusDia * 0.18f, 0.08f), noseMarkerMat);
 
-            // 2. Landing Gear Skids
-            float skidSpread = Mathf.Max(0.12f, fusDia * 0.9f);
-            CreatePart(PrimitiveType.Cube, "LandingSkid_L", visualRoot.transform,
-                new Vector3(-skidSpread, -0.07f, 0f), Quaternion.identity,
-                new Vector3(0.015f, 0.015f, fusLen * 0.65f), darkCarbonMat);
-            CreatePart(PrimitiveType.Cube, "LandingSkid_R", visualRoot.transform,
-                new Vector3(skidSpread, -0.07f, 0f), Quaternion.identity,
-                new Vector3(0.015f, 0.015f, fusLen * 0.65f), darkCarbonMat);
+            // 2. Landing Gear (Tricycle Wheeled Gear for Fixed-Wing / Skids for Multirotor)
+            float gearHeight = Mathf.Max(0.06f, (float)cfg.LandingGearHeightMeters);
+            bool isWheeled = cfg.Category == VehicleAirframeCategory.FixedWing ||
+                             cfg.Category == VehicleAirframeCategory.HybridQuadPlaneVtol;
+
+            if (isWheeled)
+            {
+                float wheelRadius = 0.025f;
+                float wheelAxleY = -gearHeight + wheelRadius;
+                float strutTopY = -fusDia * 0.25f;
+                float strutMidY = 0.5f * (strutTopY + wheelAxleY);
+                float strutLen = Mathf.Abs(strutTopY - wheelAxleY);
+
+                // A. Nose Gear (Front center)
+                float noseZ = fusLen * 0.35f;
+                CreatePart(PrimitiveType.Cylinder, "NoseStrut", visualRoot.transform,
+                    new Vector3(0f, strutMidY, noseZ), Quaternion.identity,
+                    new Vector3(0.012f, strutLen * 0.5f, 0.012f), darkCarbonMat);
+                CreatePart(PrimitiveType.Cylinder, "NoseWheel", visualRoot.transform,
+                    new Vector3(0f, wheelAxleY, noseZ), Quaternion.Euler(0f, 0f, 90f),
+                    new Vector3(wheelRadius * 2f, 0.016f, wheelRadius * 2f), darkCarbonMat);
+
+                // B. Main Landing Gear (Left & Right wheels with wide track width)
+                float mainTrackX = 0.18f;
+                float mainZ = -0.05f;
+
+                // Left Main Gear
+                Vector3 mainLTop = new Vector3(0f, strutTopY, mainZ);
+                Vector3 mainLBottom = new Vector3(-mainTrackX, wheelAxleY, mainZ);
+                Quaternion rotL = Quaternion.FromToRotation(Vector3.up, (mainLTop - mainLBottom).normalized);
+                CreatePart(PrimitiveType.Cylinder, "MainStrut_L", visualRoot.transform,
+                    0.5f * (mainLTop + mainLBottom), rotL,
+                    new Vector3(0.012f, Vector3.Distance(mainLTop, mainLBottom) * 0.5f, 0.012f), darkCarbonMat);
+                CreatePart(PrimitiveType.Cylinder, "MainWheel_L", visualRoot.transform,
+                    mainLBottom, Quaternion.Euler(0f, 0f, 90f),
+                    new Vector3(wheelRadius * 2f, 0.020f, wheelRadius * 2f), darkCarbonMat);
+
+                // Right Main Gear
+                Vector3 mainRTop = new Vector3(0f, strutTopY, mainZ);
+                Vector3 mainRBottom = new Vector3(mainTrackX, wheelAxleY, mainZ);
+                Quaternion rotR = Quaternion.FromToRotation(Vector3.up, (mainRTop - mainRBottom).normalized);
+                CreatePart(PrimitiveType.Cylinder, "MainStrut_R", visualRoot.transform,
+                    0.5f * (mainRTop + mainRBottom), rotR,
+                    new Vector3(0.012f, Vector3.Distance(mainRTop, mainRBottom) * 0.5f, 0.012f), darkCarbonMat);
+                CreatePart(PrimitiveType.Cylinder, "MainWheel_R", visualRoot.transform,
+                    mainRBottom, Quaternion.Euler(0f, 0f, 90f),
+                    new Vector3(wheelRadius * 2f, 0.020f, wheelRadius * 2f), darkCarbonMat);
+            }
+            else
+            {
+                // Multicopter Landing Skids resting exactly at -gearHeight
+                float skidSpread = Mathf.Max(0.12f, fusDia * 0.9f);
+                float skidBottomY = -gearHeight + 0.008f;
+                CreatePart(PrimitiveType.Cube, "LandingSkid_L", visualRoot.transform,
+                    new Vector3(-skidSpread, skidBottomY, 0f), Quaternion.identity,
+                    new Vector3(0.015f, 0.015f, fusLen * 0.65f), darkCarbonMat);
+                CreatePart(PrimitiveType.Cube, "LandingSkid_R", visualRoot.transform,
+                    new Vector3(skidSpread, skidBottomY, 0f), Quaternion.identity,
+                    new Vector3(0.015f, 0.015f, fusLen * 0.65f), darkCarbonMat);
+            }
 
             // 3. 3D Lifting Surfaces (Main Wing, Horizontal Tail, Vertical Fin)
             if (cfg.Wings != null)

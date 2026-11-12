@@ -107,6 +107,14 @@ namespace FlightDynamics6DoF.Core.Dynamics
         {
             int nRotors = _config.Rotors.Count;
             State.SimTimeSec = 0.0;
+
+            // When resting on the ground, position vehicle CG above ground elevation by the landing gear height
+            double restZ = GroundElevationNedDown - _config.LandingGearHeightMeters;
+            if (positionNed.Z >= restZ - 0.01)
+            {
+                positionNed = new Vec3d(positionNed.X, positionNed.Y, restZ);
+            }
+
             State.PositionNed = positionNed;
             State.AttitudeBodyToNed = attitudeBodyToNed.Normalized();
             State.VelocityBodyFrd = velocityBodyFrd;
@@ -122,7 +130,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
             State.BatteryVoltageVolts = _config.BatteryCells * 4.2;
             State.BatteryCurrentAmps = 0.5;
             State.BatteryRemainingFraction = 1.0;
-            State.AltitudeAglMeters = System.Math.Max(0.0, GroundElevationNedDown - positionNed.Z);
+            State.AltitudeAglMeters = System.Math.Max(0.0, GroundElevationNedDown - (State.PositionNed.Z + _config.LandingGearHeightMeters));
             State.IsGrounded = State.AltitudeAglMeters <= 0.02;
         }
 
@@ -217,7 +225,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
             State.VelocityBodyFrd = FrameConverter.UnityToFrdVector(unityLocalVel);
             State.VelocityNed = State.AttitudeBodyToNed.RotateBodyToNed(State.VelocityBodyFrd);
             State.AngularVelocityBodyFrd = new Vec3d(-unityLocalAngularVel.Z, -unityLocalAngularVel.X, unityLocalAngularVel.Y);
-            State.AltitudeAglMeters = System.Math.Max(0.0, GroundElevationNedDown - State.PositionNed.Z);
+            State.AltitudeAglMeters = System.Math.Max(0.0, GroundElevationNedDown - (State.PositionNed.Z + _config.LandingGearHeightMeters));
             State.IsGrounded = State.AltitudeAglMeters <= 0.02;
 
             StepSimulation(dt);
@@ -287,9 +295,10 @@ namespace FlightDynamics6DoF.Core.Dynamics
 
             // Ground plane contact geometric constraints and normal reaction force
             Vec3d vNed = State.AttitudeBodyToNed.RotateBodyToNed(State.VelocityBodyFrd);
-            if (State.PositionNed.Z > GroundElevationNedDown)
+            double groundRestNedZ = GroundElevationNedDown - _config.LandingGearHeightMeters;
+            if (State.PositionNed.Z > groundRestNedZ)
             {
-                State.PositionNed = new Vec3d(State.PositionNed.X, State.PositionNed.Y, GroundElevationNedDown);
+                State.PositionNed = new Vec3d(State.PositionNed.X, State.PositionNed.Y, groundRestNedZ);
                 if (vNed.Z > 0.0)
                 {
                     vNed.Z = 0.0;
@@ -302,7 +311,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
             double netDownForceN = fAeroNed.Z + weightN;
 
             // When sitting on the ground with net downward load, ground normal reaction supports weight
-            if (State.PositionNed.Z >= GroundElevationNedDown - 0.005 && netDownForceN > 0.0)
+            if (State.PositionNed.Z >= groundRestNedZ - 0.005 && netDownForceN > 0.0)
             {
                 Vec3d groundNormalNed = new Vec3d(0.0, 0.0, -netDownForceN);
                 double invMass = 1.0 / System.Math.Max(0.05, _config.MassKg);
@@ -384,7 +393,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
             State.SpecificForceBodyFrd = specForce1;
             State.TotalAeroPropForceFrd = fAero1;
             State.TotalAeroPropMomentCgFrd = mAero1;
-            State.AltitudeAglMeters = System.Math.Max(0.0, GroundElevationNedDown - State.PositionNed.Z);
+            State.AltitudeAglMeters = System.Math.Max(0.0, GroundElevationNedDown - (State.PositionNed.Z + _config.LandingGearHeightMeters));
             State.IsGrounded = State.AltitudeAglMeters <= 0.02;
 
             UpdateAirDataMetrics(State.VelocityBodyFrd, gustBodyFrd);
@@ -413,7 +422,8 @@ namespace FlightDynamics6DoF.Core.Dynamics
             // Add Ground Spring-Damper Contact Force only if touching/penetrating runway (depth > 0)
             Vec3d fContactFrd = Vec3d.Zero;
             Vec3d mContactFrd = Vec3d.Zero;
-            double penetration = posNed.Z - GroundElevationNedDown;
+            double gearBottomNedZ = posNed.Z + _config.LandingGearHeightMeters;
+            double penetration = gearBottomNedZ - GroundElevationNedDown;
             if (penetration > 0.0)
             {
                 double depth = penetration;
@@ -515,7 +525,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
         {
             Vec3d windBodyFrd = qBodyToNed.RotateNedToBody(MeanWindNed) + gustBodyFrd;
             Vec3d vAirRelFrd = velBodyFrd - windBodyFrd;
-            double altAgl = System.Math.Max(0.0, GroundElevationNedDown - posNed.Z);
+            double altAgl = System.Math.Max(0.0, GroundElevationNedDown - (posNed.Z + _config.LandingGearHeightMeters));
 
             totalForceFrd = Vec3d.Zero;
             totalMomentCgFrd = Vec3d.Zero;

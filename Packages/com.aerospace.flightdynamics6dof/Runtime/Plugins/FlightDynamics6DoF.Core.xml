@@ -156,6 +156,13 @@
             Complete data-driven aircraft configuration supporting Multirotors, Fixed-Wing UAVs, and Hybrid VTOL aircraft.
             </summary>
         </member>
+        <member name="F:FlightDynamics6DoF.Core.Specs.AircraftConfigSpec.LandingGearHeightMeters">
+            <summary>
+            Vertical distance from aircraft CG down to landing gear contact point (wheels or skids) in meters.
+            When resting on runway, CG is positioned at (GroundElevation - LandingGearHeightMeters) in NED.
+            Fixed-Wing default ~0.18m (allows 12-inch prop ground clearance), Multirotor ~0.08m.
+            </summary>
+        </member>
         <member name="M:FlightDynamics6DoF.Core.Specs.AircraftConfigSpec.CreateStandardQuadcopterX">
             <summary>
             Factory preset: Standard PX4-numbering Quadcopter X (Front-Right CCW=0, Rear-Left CCW=1, Front-Left CW=2, Rear-Right CW=3).
@@ -338,19 +345,19 @@
         </member>
         <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.WingtipStrikeRollLimitRad">
             <summary>
-            Maximum allowable bank/roll angle in radians while landing gear wheels are on the runway (~3.0 deg = 0.052 rad).
+            Maximum allowable bank/roll angle in radians while landing gear wheels are on the runway (~4.3 deg = 0.075 rad).
             Prevents wingtip strike and lateral ground roll-over.
             </summary>
         </member>
         <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.GearRollRestoringStiffnessPerKg">
             <summary>
-            Landing gear track-width roll restoring stiffness per unit vehicle mass (35.0 N*m/rad per kg).
+            Landing gear track-width roll restoring stiffness per unit vehicle mass (45.0 N*m/rad per kg).
             Resists motor reaction torque and prevents lateral tip-over on runway.
             </summary>
         </member>
         <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.GearRollDampingRatePerKg">
             <summary>
-            Landing gear roll damping rate per unit vehicle mass (6.0 N*m/(rad/s) per kg).
+            Landing gear roll damping rate per unit vehicle mass (8.0 N*m/(rad/s) per kg).
             </summary>
         </member>
         <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.NoseGearPitchRestoringStiffnessPerKg">

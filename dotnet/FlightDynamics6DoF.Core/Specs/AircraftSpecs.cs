@@ -279,6 +279,13 @@ namespace FlightDynamics6DoF.Core.Specs
         public double BatteryCapacityMah = 5000.0;
         public double BatteryInternalResistanceOhm = 0.018;
 
+        /// <summary>
+        /// Vertical distance from aircraft CG down to landing gear contact point (wheels or skids) in meters.
+        /// When resting on runway, CG is positioned at (GroundElevation - LandingGearHeightMeters) in NED.
+        /// Fixed-Wing default ~0.18m (allows 12-inch prop ground clearance), Multirotor ~0.08m.
+        /// </summary>
+        public double LandingGearHeightMeters = 0.08;
+
         public FuselageSpec Fuselage = new FuselageSpec();
         public List<WingSurfaceSpec> Wings = new List<WingSurfaceSpec>();
         public List<RotorSpec> Rotors = new List<RotorSpec>();
@@ -351,6 +358,7 @@ namespace FlightDynamics6DoF.Core.Specs
                 ReferenceChordMeters = 0.20,
                 ReferenceSpanMeters = 1.80,
                 DesignCruiseSpeedMps = 18.0,
+                LandingGearHeightMeters = 0.18,
                 Fuselage = new FuselageSpec
                 {
                     Name = "StreamlinedPodFuselage",
