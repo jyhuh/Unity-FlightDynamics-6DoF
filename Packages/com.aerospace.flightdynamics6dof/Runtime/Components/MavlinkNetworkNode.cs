@@ -10,6 +10,7 @@ using System.Threading;
 using UnityEngine;
 using FlightDynamics6DoF.Core.Dynamics;
 using FlightDynamics6DoF.Core.Mavlink;
+using FlightDynamics6DoF.Core.Math;
 using Debug = UnityEngine.Debug;
 
 namespace FlightDynamics6DoF.Unity
@@ -38,9 +39,9 @@ namespace FlightDynamics6DoF.Unity
         public NetworkTransportType Transport = NetworkTransportType.TcpPx4SitlServer;
 
         public string RemoteHost = "127.0.0.1";
-        public int Px4TcpPort = 4560;
-        public int RemotePort = 14550;
-        public int LocalPort = 14540;
+        public int Px4TcpPort = NetworkConstants.Px4SitlTcpPort;
+        public int RemotePort = NetworkConstants.QgcTelemetryUdpPort;
+        public int LocalPort = NetworkConstants.LocalAutopilotUdpPort;
 
         public byte SystemId = 1;
         public byte ComponentId = 1;
@@ -54,6 +55,7 @@ namespace FlightDynamics6DoF.Unity
         private readonly MavlinkSimulationBridge _bridge = new MavlinkSimulationBridge();
         private readonly ConcurrentQueue<byte[]> _rxQueue = new ConcurrentQueue<byte[]>();
         private readonly AutoResetEvent _rxPacketSignal = new AutoResetEvent(false);
+        private readonly byte[] _udpSendBuffer = new byte[512];
 
         private UdpClient? _udpClient;
         private IPEndPoint? _udpRemoteEndPoint;
@@ -203,17 +205,21 @@ namespace FlightDynamics6DoF.Unity
         private void SendRawBytes(ReadOnlyMemory<byte> packet)
         {
             if (!_running) return;
-            byte[] arr = packet.ToArray();
 
             try
             {
                 if (Transport == NetworkTransportType.UdpGcsOrSitl && _udpClient != null && _udpRemoteEndPoint != null)
                 {
-                    _udpClient.Send(arr, arr.Length, _udpRemoteEndPoint);
+                    int len = packet.Length;
+                    if (len <= _udpSendBuffer.Length)
+                    {
+                        packet.Span.CopyTo(_udpSendBuffer);
+                        _udpClient.Client.SendTo(_udpSendBuffer, 0, len, SocketFlags.None, _udpRemoteEndPoint);
+                    }
                 }
                 else if (_tcpStream != null && _tcpStream.CanWrite)
                 {
-                    _tcpStream.Write(arr, 0, arr.Length);
+                    _tcpStream.Write(packet.Span);
                 }
             }
             catch

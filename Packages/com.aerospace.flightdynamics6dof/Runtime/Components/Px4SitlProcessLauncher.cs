@@ -37,11 +37,11 @@ namespace FlightDynamics6DoF.Unity
         public ContainerRuntimeBackend RuntimeBackend = ContainerRuntimeBackend.AutoDetect;
 
         [Tooltip("Workspace root containing scripts/px4-sitl.sh and PX4-Autopilot.")]
-        public string WorkspaceRootPath = "/Users/byabya/UnityDrone";
+        public string WorkspaceRootPath = "";
 
         [Header("PX4-Autopilot Configuration")]
         [Tooltip("Path to local PX4-Autopilot repository root.")]
-        public string Px4RepositoryPath = "/Users/byabya/UnityDrone/PX4-Autopilot";
+        public string Px4RepositoryPath = "";
 
         [Tooltip("Automatically launch the PX4 SITL container/process when entering Play Mode.")]
         public bool AutoLaunchPx4OnPlay = true;
@@ -66,12 +66,41 @@ namespace FlightDynamics6DoF.Unity
 
         public string LastConsoleSummary => _lastConsoleSummary;
 
+        public string EffectiveWorkspaceRoot
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(WorkspaceRootPath) && Directory.Exists(WorkspaceRootPath))
+                    return WorkspaceRootPath;
+
+                try
+                {
+                    string candidate = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+                    if (Directory.Exists(candidate)) return candidate;
+                }
+                catch { }
+
+                return WorkspaceRootPath ?? "";
+            }
+        }
+
+        public string EffectivePx4RepositoryPath
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(Px4RepositoryPath) && Directory.Exists(Px4RepositoryPath))
+                    return Px4RepositoryPath;
+
+                return Path.Combine(EffectiveWorkspaceRoot, "PX4-Autopilot");
+            }
+        }
+
         public string Px4BinaryPath =>
-            Path.Combine(Px4RepositoryPath, "build", "px4_sitl_default", "bin", "px4");
+            Path.Combine(EffectivePx4RepositoryPath, "build", "px4_sitl_default", "bin", "px4");
 
         public bool IsPx4BinaryBuilt => File.Exists(Px4BinaryPath);
 
-        private string ManagerScriptPath => Path.Combine(WorkspaceRootPath, "scripts", "px4-sitl.sh");
+        private string ManagerScriptPath => Path.Combine(EffectiveWorkspaceRoot, "scripts", "px4-sitl.sh");
 
         private string GetBackendEnvPrefix()
         {
@@ -85,6 +114,11 @@ namespace FlightDynamics6DoF.Unity
 
         private void Awake()
         {
+            if (string.IsNullOrEmpty(WorkspaceRootPath) || !Directory.Exists(WorkspaceRootPath))
+                WorkspaceRootPath = EffectiveWorkspaceRoot;
+            if (string.IsNullOrEmpty(Px4RepositoryPath) || !Directory.Exists(Px4RepositoryPath))
+                Px4RepositoryPath = EffectivePx4RepositoryPath;
+
             if (TargetVehicle == null)
                 TargetVehicle = FindFirstObjectByType<FlightDynamicsVehicle>();
         }

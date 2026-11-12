@@ -103,14 +103,14 @@ namespace FlightDynamics6DoF.Core.Gnc
                         db.FlattenedMixerMatrix[ch * 4 + 2] * desiredMomentFrdNm.Z +
                         db.FlattenedMixerMatrix[ch * 4 + 3] * desiredUpwardThrustNewtons;
 
-                    uThrust = System.Math.Max(0.0, System.Math.Min(1.0, uThrust));
+                    uThrust = System.Math.Clamp(uThrust, 0.0, 1.0);
                     // Since Thrust ~ omega^2, normalized RPM command is sqrt(uThrust)
                     outActuatorControls16[ch] = System.Math.Sqrt(uThrust);
                 }
                 else if (r.ThrustAxisFrd.X > 0.35)
                 {
                     // Forward tractor/pusher propulsion motor
-                    outActuatorControls16[ch] = System.Math.Max(0.0, System.Math.Min(1.0, desiredForwardThrottleNormalized));
+                    outActuatorControls16[ch] = System.Math.Clamp(desiredForwardThrottleNormalized, 0.0, 1.0);
                 }
             }
 
@@ -118,9 +118,9 @@ namespace FlightDynamics6DoF.Core.Gnc
             if (config.Wings != null && config.Wings.Count > 0)
             {
                 double qScale = System.Math.Max(20.0, 0.5 * 1.225 * System.Math.Max(8.0, airspeedMps) * System.Math.Max(8.0, airspeedMps) * config.ReferenceAreaSqM);
-                double rollNorm = System.Math.Max(-1.0, System.Math.Min(1.0, desiredMomentFrdNm.X / (qScale * config.ReferenceSpanMeters * 0.08)));
-                double pitchNorm = System.Math.Max(-1.0, System.Math.Min(1.0, desiredMomentFrdNm.Y / (qScale * config.ReferenceChordMeters * 0.12)));
-                double yawNorm = System.Math.Max(-1.0, System.Math.Min(1.0, desiredMomentFrdNm.Z / (qScale * config.ReferenceSpanMeters * 0.06)));
+                double rollNorm = System.Math.Clamp(desiredMomentFrdNm.X / (qScale * config.ReferenceSpanMeters * 0.08), -1.0, 1.0);
+                double pitchNorm = System.Math.Clamp(desiredMomentFrdNm.Y / (qScale * config.ReferenceChordMeters * 0.12), -1.0, 1.0);
+                double yawNorm = System.Math.Clamp(desiredMomentFrdNm.Z / (qScale * config.ReferenceSpanMeters * 0.06), -1.0, 1.0);
 
                 for (int i = 0; i < config.Wings.Count; i++)
                 {

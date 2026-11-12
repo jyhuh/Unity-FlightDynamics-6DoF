@@ -75,6 +75,14 @@ namespace FlightDynamics6DoF.Tests
             AssertNear(ned.X, nedFromLla.X, 1e-3, "WGS84 North round-trip");
             AssertNear(ned.Y, nedFromLla.Y, 1e-3, "WGS84 East round-trip");
             AssertNear(ned.Z, nedFromLla.Z, 1e-3, "WGS84 Down round-trip");
+
+            // Verify central AerospaceConstants structs
+            AssertNear(PhysicalConstants.GravityMps2, 9.80665, 1e-5, "PhysicalConstants.GravityMps2");
+            AssertNear(PhysicalConstants.SeaLevelDensityKgM3, 1.225, 1e-3, "PhysicalConstants.SeaLevelDensityKgM3");
+            AssertNear(Wgs84Constants.SemiMajorAxisM, 6378137.0, 1e-1, "Wgs84Constants.SemiMajorAxisM");
+            AssertNear(GroundContactConstants.PavedRunwayRollingFrictionMu, 0.025, 1e-4, "GroundContactConstants.PavedRunwayRollingFrictionMu");
+            AssertTrue(NetworkConstants.Px4SitlTcpPort == 4560, "NetworkConstants.Px4SitlTcpPort == 4560");
+            AssertNear(MathConstants.Deg2Rad, System.Math.PI / 180.0, 1e-12, "MathConstants.Deg2Rad");
         }
 
         private static void TestModule1AirfoilPolarAndViterna()

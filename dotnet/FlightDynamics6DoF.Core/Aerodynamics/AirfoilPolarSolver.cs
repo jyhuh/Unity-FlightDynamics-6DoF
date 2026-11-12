@@ -38,12 +38,11 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             double flapDeflectionRad = 0.0,
             double flapChordRatio = 0.25)
         {
-            // Wrap alpha into [-pi, pi]
-            while (alphaRad > System.Math.PI) alphaRad -= 2.0 * System.Math.PI;
-            while (alphaRad < -System.Math.PI) alphaRad += 2.0 * System.Math.PI;
+            // Normalize alpha into [-pi, pi]
+            alphaRad = alphaRad - 2.0 * System.Math.PI * System.Math.Floor((alphaRad + System.Math.PI) / (2.0 * System.Math.PI));
 
-            double re = System.Math.Max(1.0e4, System.Math.Min(reynolds, 1.0e7));
-            double m = System.Math.Max(0.0, System.Math.Min(mach, 0.699));
+            double re = System.Math.Clamp(reynolds, 1.0e4, 1.0e7);
+            double m = System.Math.Clamp(mach, 0.0, 0.699);
 
             // Prandtl-Glauert compressibility factor for subsonic flow (M < 0.7)
             double pgBeta = System.Math.Sqrt(1.0 - m * m);
@@ -127,13 +126,13 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             double clInviscid = 2.0 * System.Math.PI * (alphaRad - alpha0);
 
             // Du-Selig (1998) 3D stall delay parameters (a=1, b=1, d=1)
-            double cOverR = System.Math.Max(0.02, System.Math.Min(chordOverRadius, 0.45));
-            double rOverR = System.Math.Max(0.15, System.Math.Min(radiusNormalized, 0.99));
+            double cOverR = System.Math.Clamp(chordOverRadius, 0.02, 0.45);
+            double rOverR = System.Math.Clamp(radiusNormalized, 0.15, 0.99);
             double lambdaR = System.Math.Max(0.2, tipSpeedRatioLambda * rOverR);
             double exponent = 1.0 / (lambdaR * rOverR);
             double term = System.Math.Pow(cOverR, exponent);
             double fL = (1.0 / (2.0 * System.Math.PI)) * ((1.6 * cOverR / 0.1267) * ((1.0 - term) / (1.0 + term)) - 1.0);
-            fL = System.Math.Max(0.0, System.Math.Min(fL, 0.85));
+            fL = System.Math.Clamp(fL, 0.0, 0.85);
 
             // Apply rotational stall augmentation in the post-stall separation onset region
             if (System.Math.Abs(alphaRad) < 40.0 * FrameConverter.Deg2Rad)
@@ -161,8 +160,8 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                     sumDiff += (airfoil.CstUpper[i] - airfoil.CstLower[i]);
                     sumMid += 0.5 * (airfoil.CstUpper[i] + airfoil.CstLower[i]);
                 }
-                effThickness = System.Math.Max(0.04, System.Math.Min(0.30, (sumDiff / n) * 0.38));
-                effCamber = System.Math.Max(-0.08, System.Math.Min(0.10, (sumMid / n) * 0.65));
+                effThickness = System.Math.Clamp((sumDiff / n) * 0.38, 0.04, 0.30);
+                effCamber = System.Math.Clamp((sumMid / n) * 0.65, -0.08, 0.10);
                 teSlope = System.Math.Abs(airfoil.CstUpper[n - 1] - airfoil.CstLower[n - 1]);
             }
             else
@@ -206,8 +205,8 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             // Boundary-layer transition prediction (NeuralFoil-equivalent physics correlation)
             double alphaNorm = (alpha - alpha0) / System.Math.Max(0.08, alphaStallPos);
             double reFactor = System.Math.Pow(5.0e5 / re, 0.2);
-            xtrTop = System.Math.Max(0.02, System.Math.Min(0.95, 0.58 * reFactor - 0.42 * alphaNorm));
-            xtrBot = System.Math.Max(0.02, System.Math.Min(0.95, 0.58 * reFactor + 0.42 * alphaNorm));
+            xtrTop = System.Math.Clamp(0.58 * reFactor - 0.42 * alphaNorm, 0.02, 0.95);
+            xtrBot = System.Math.Clamp(0.58 * reFactor + 0.42 * alphaNorm, 0.02, 0.95);
 
             // Viscous profile drag: laminar + turbulent skin friction + thickness form factor + separation pressure drag
             double cfLam = 1.328 / System.Math.Sqrt(re);
@@ -241,7 +240,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             out double cd,
             out double cm)
         {
-            double ar = System.Math.Max(2.0, System.Math.Min(aspectRatio, 25.0));
+            double ar = System.Math.Clamp(aspectRatio, 2.0, 25.0);
             double cdMax = 1.11 + 0.018 * ar;
             double a1 = 0.5 * cdMax;
             double b1 = cdMax;
@@ -284,7 +283,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
 
         public static double ComputeFlapEffectiveness(double flapChordRatio)
         {
-            double ef = System.Math.Max(0.0, System.Math.Min(0.6, flapChordRatio));
+            double ef = System.Math.Clamp(flapChordRatio, 0.0, 0.6);
             if (ef <= 1e-4) return 0.0;
             double thetaF = System.Math.Acos(2.0 * ef - 1.0);
             return 1.0 - (thetaF - System.Math.Sin(thetaF)) / System.Math.PI;

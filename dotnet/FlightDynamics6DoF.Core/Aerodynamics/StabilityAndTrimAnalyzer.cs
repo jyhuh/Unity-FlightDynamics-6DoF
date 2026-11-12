@@ -231,7 +231,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             db.CmAlpha = (cmAp - cmAm) / (2.0 * dAlpha);
 
             double arEff = (bRef * bRef) / System.Math.Max(0.01, sRef);
-            db.OswaldEfficiency = System.Math.Max(0.65, System.Math.Min(0.90, 1.78 * (1.0 - 0.045 * System.Math.Pow(arEff, 0.68)) - 0.64));
+            db.OswaldEfficiency = System.Math.Clamp(1.78 * (1.0 - 0.045 * System.Math.Pow(arEff, 0.68)) - 0.64, 0.65, 0.90);
             db.InducedDragFactorK = 1.0 / (System.Math.PI * System.Math.Max(1.5, arEff) * db.OswaldEfficiency);
 
             // Central finite difference wrt sideslip beta (+/- 1 deg)
@@ -307,7 +307,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                 double cdTrim = db.CD0 + db.InducedDragFactorK * clReq * clReq;
                 double dragTrim = qS * cdTrim;
                 double maxForwardThrust = System.Math.Max(10.0, config.MassKg * 8.0);
-                db.TrimThrottleNormalized = System.Math.Max(0.1, System.Math.Min(0.95, dragTrim / maxForwardThrust));
+                db.TrimThrottleNormalized = System.Math.Clamp(dragTrim / maxForwardThrust, 0.1, 0.95);
             }
             else
             {
@@ -316,7 +316,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                 db.TrimAlphaDeg = 0.0;
                 db.TrimElevatorDeg = 0.0;
                 db.TrimThrottleNormalized = db.RotorHoverRpm.Length > 0 && config.Rotors.Count > 0
-                    ? System.Math.Max(0.1, System.Math.Min(0.95, db.RotorHoverRpm[0] / config.Rotors[0].MaxRpm))
+                    ? System.Math.Clamp(db.RotorHoverRpm[0] / config.Rotors[0].MaxRpm, 0.1, 0.95)
                     : 0.52;
             }
         }

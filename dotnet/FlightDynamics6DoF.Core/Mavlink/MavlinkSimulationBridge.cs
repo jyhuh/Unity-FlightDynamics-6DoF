@@ -35,6 +35,8 @@ namespace FlightDynamics6DoF.Core.Mavlink
         private byte _txSequence = 0;
         private double _lastHeartbeatTimeSec = -1.0;
         private double _lastTelemetryTimeSec = -1.0;
+        private readonly byte[] _packetBuf = new byte[280];
+        private readonly byte[] _replyBuf = new byte[280];
 
         public MavlinkBridgeMode Mode { get; set; } = MavlinkBridgeMode.ExternalSitlHil;
         public byte SystemId { get; set; } = 1;
@@ -57,14 +59,13 @@ namespace FlightDynamics6DoF.Core.Mavlink
             Action<ReadOnlyMemory<byte>>? sendCallback = null)
         {
             ReceivedActuatorControlsThisStep = false;
-            byte[] replyBuf = new byte[280];
 
             for (int i = 0; i < data.Length; i++)
             {
                 if (_parser.PushByte(data[i], out MavlinkV2Frame frame))
                 {
                     TotalFramesReceived++;
-                    HandleReceivedFrame(frame, engine, controller, replyBuf, sendCallback);
+                    HandleReceivedFrame(frame, engine, controller, _replyBuf, sendCallback);
                 }
             }
         }
@@ -79,7 +80,6 @@ namespace FlightDynamics6DoF.Core.Mavlink
             Action<ReadOnlyMemory<byte>> sendCallback)
         {
             if (sendCallback == null) return;
-            byte[] packetBuf = new byte[280];
             double now = engine.State.SimTimeSec;
 
             // 1. 1 Hz Heartbeat
@@ -88,16 +88,16 @@ namespace FlightDynamics6DoF.Core.Mavlink
                 _lastHeartbeatTimeSec = now;
                 byte baseMode = (byte)(0x80 | (controller.IsArmed ? 0x80 : 0x00) | 0x01);
                 byte sysStatus = (byte)(controller.IsArmed ? 4 : 3); // 4: MAV_STATE_ACTIVE, 3: STANDBY
-                int len = MavlinkV2Codec.PackHeartbeat(_txSequence++, SystemId, ComponentId, 2, 12, baseMode, (uint)controller.CurrentMode, sysStatus, packetBuf);
-                sendCallback(new ReadOnlyMemory<byte>(packetBuf, 0, len));
+                int len = MavlinkV2Codec.PackHeartbeat(_txSequence++, SystemId, ComponentId, 2, 12, baseMode, (uint)controller.CurrentMode, sysStatus, _packetBuf);
+                sendCallback(new ReadOnlyMemory<byte>(_packetBuf, 0, len));
                 TotalFramesSent++;
             }
 
             if (Mode == MavlinkBridgeMode.ExternalSitlHil)
             {
                 // High-rate HIL_SENSOR (#107) every step to drive PX4 simulator_mavlink clock & EKF2
-                int lenSensor = MavlinkV2Codec.PackHilSensor(_txSequence++, SystemId, ComponentId, sensorReadings, packetBuf);
-                sendCallback(new ReadOnlyMemory<byte>(packetBuf, 0, lenSensor));
+                int lenSensor = MavlinkV2Codec.PackHilSensor(_txSequence++, SystemId, ComponentId, sensorReadings, _packetBuf);
+                sendCallback(new ReadOnlyMemory<byte>(_packetBuf, 0, lenSensor));
                 TotalFramesSent++;
 
                 // Ground-truth HIL_STATE_QUATERNION (#115) for PX4 SITL logging & estimator comparison
@@ -105,14 +105,14 @@ namespace FlightDynamics6DoF.Core.Mavlink
                     engine.State.PositionNed, engine.OriginLatitudeDeg, engine.OriginLongitudeDeg, engine.OriginAltitudeMsl);
                 int lenState = MavlinkV2Codec.PackHilStateQuaternion(
                     _txSequence++, SystemId, ComponentId, sensorReadings.TimestampMicroseconds,
-                    engine.State, lla.X, lla.Y, lla.Z, packetBuf);
-                sendCallback(new ReadOnlyMemory<byte>(packetBuf, 0, lenState));
+                    engine.State, lla.X, lla.Y, lla.Z, _packetBuf);
+                sendCallback(new ReadOnlyMemory<byte>(_packetBuf, 0, lenState));
                 TotalFramesSent++;
 
                 if (sensorReadings.GpsUpdatedThisStep)
                 {
-                    int lenGps = MavlinkV2Codec.PackHilGps(_txSequence++, SystemId, ComponentId, sensorReadings, packetBuf);
-                    sendCallback(new ReadOnlyMemory<byte>(packetBuf, 0, lenGps));
+                    int lenGps = MavlinkV2Codec.PackHilGps(_txSequence++, SystemId, ComponentId, sensorReadings, _packetBuf);
+                    sendCallback(new ReadOnlyMemory<byte>(_packetBuf, 0, lenGps));
                     TotalFramesSent++;
                 }
             }
@@ -126,8 +126,8 @@ namespace FlightDynamics6DoF.Core.Mavlink
 
                     int lenAtt = MavlinkV2Codec.PackAttitude(
                         _txSequence++, SystemId, ComponentId, bootMs,
-                        engine.State.AttitudeBodyToNed, engine.State.AngularVelocityBodyFrd, packetBuf);
-                    sendCallback(new ReadOnlyMemory<byte>(packetBuf, 0, lenAtt));
+                        engine.State.AttitudeBodyToNed, engine.State.AngularVelocityBodyFrd, _packetBuf);
+                    sendCallback(new ReadOnlyMemory<byte>(_packetBuf, 0, lenAtt));
                     TotalFramesSent++;
 
                     Vec3d lla = FrameConverter.NedToWgs84(
@@ -137,8 +137,8 @@ namespace FlightDynamics6DoF.Core.Mavlink
                     int lenGpos = MavlinkV2Codec.PackGlobalPositionInt(
                         _txSequence++, SystemId, ComponentId, bootMs,
                         lla.X, lla.Y, lla.Z, -engine.State.PositionNed.Z,
-                        engine.State.VelocityNed, euler.Z * FrameConverter.Rad2Deg, packetBuf);
-                    sendCallback(new ReadOnlyMemory<byte>(packetBuf, 0, lenGpos));
+                        engine.State.VelocityNed, euler.Z * FrameConverter.Rad2Deg, _packetBuf);
+                    sendCallback(new ReadOnlyMemory<byte>(_packetBuf, 0, lenGpos));
                     TotalFramesSent++;
                 }
             }

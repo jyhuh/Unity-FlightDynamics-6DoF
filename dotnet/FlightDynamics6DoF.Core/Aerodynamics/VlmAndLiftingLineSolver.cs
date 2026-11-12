@@ -323,7 +323,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                 if (!enable3DVlmWakeInduction)
                 {
                     double eOswald = 1.78 * (1.0 - 0.045 * System.Math.Pow(ar, 0.68)) - 0.64;
-                    eOswald = System.Math.Max(0.65, System.Math.Min(0.92, eOswald));
+                    eOswald = System.Math.Clamp(eOswald, 0.65, 0.92);
                     alphaLocal /= (1.0 + 2.0 / (ar * eOswald));
                 }
 
@@ -394,7 +394,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             if (!p.HasControlSurface || controls == null || p.ControlChannel < 0 || p.ControlChannel >= controls.Length)
                 return 0.0;
 
-            double cmd = System.Math.Max(-1.0, System.Math.Min(1.0, controls[p.ControlChannel]));
+            double cmd = System.Math.Clamp(controls[p.ControlChannel], -1.0, 1.0);
             switch (p.ControlType)
             {
                 case ControlSurfaceType.Aileron:
@@ -421,7 +421,6 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             Vec3d p,
             bool includeBoundSegment)
         {
-            const double invFourPi = 1.0 / (4.0 * System.Math.PI);
             const double coreRadiusSq = 1.0e-5;
 
             Vec3d vTotal = Vec3d.Zero;
@@ -437,7 +436,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                 double r2Mag = System.Math.Max(1e-6, r2.Magnitude);
 
                 double dotTerm = Vec3d.Dot(r0, r1 / r1Mag - r2 / r2Mag);
-                vTotal += cross * (invFourPi * dotTerm / (crossSq + coreRadiusSq));
+                vTotal += cross * (MathConstants.InvFourPi * dotTerm / (crossSq + coreRadiusSq));
             }
 
             // Left trailing vortex from infinity to A (so -wakeDir from A to infinity)
@@ -450,13 +449,12 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
 
         private static Vec3d ComputeSemiInfiniteVortexLeg(Vec3d origin, Vec3d dirUnit, Vec3d p, double coreSq)
         {
-            const double invFourPi = 1.0 / (4.0 * System.Math.PI);
             Vec3d r1 = p - origin;
             double r1Mag = System.Math.Max(1e-6, r1.Magnitude);
             Vec3d cross = Vec3d.Cross(dirUnit, r1);
             double crossSq = cross.MagnitudeSquared;
             double factor = 1.0 + Vec3d.Dot(dirUnit, r1) / r1Mag;
-            return cross * (invFourPi * factor / (crossSq + coreSq));
+            return cross * (MathConstants.InvFourPi * factor / (crossSq + coreSq));
         }
     }
 }

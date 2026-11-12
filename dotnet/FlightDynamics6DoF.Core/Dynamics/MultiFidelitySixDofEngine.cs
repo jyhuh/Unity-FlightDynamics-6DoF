@@ -314,7 +314,8 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 if (isFixedWingOrHasWheels)
                 {
                     // Parking Brake / Static Ground Hold when throttle is near idle (< 5%)
-                    bool isThrottleIdle = State.ActuatorControlsNormalized[4] < 0.05 && State.ActuatorControlsNormalized[3] < 0.05;
+                    bool isThrottleIdle = State.ActuatorControlsNormalized[4] < GroundContactConstants.ParkingBrakeThrottleThreshold &&
+                                          State.ActuatorControlsNormalized[3] < GroundContactConstants.ParkingBrakeThrottleThreshold;
                     if (isThrottleIdle)
                     {
                         // Hold aircraft firmly on runway when resting / disarmed so wind gusts do not slide or blow it away
@@ -329,7 +330,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
                         // Prevent nose gear penetration below runway (euler.Y > 0.015 rad is nose-down into ground in aerospace FRD)
                         // while allowing takeoff rotation (euler.Y < 0 is nose-up)
                         Vec3d euler = State.AttitudeBodyToNed.ToEulerZyx();
-                        if (euler.Y > 0.015 && State.AngularVelocityBodyFrd.Y > 0.0)
+                        if (euler.Y > GroundContactConstants.NoseGearPitchDownLimitRad && State.AngularVelocityBodyFrd.Y > 0.0)
                         {
                             State.AngularVelocityBodyFrd = new Vec3d(State.AngularVelocityBodyFrd.X, 0.0, State.AngularVelocityBodyFrd.Z);
                         }
@@ -385,8 +386,8 @@ namespace FlightDynamics6DoF.Core.Dynamics
             {
                 double depth = penetration;
                 Vec3d vNed = qBodyToNed.RotateBodyToNed(velBodyFrd);
-                double kSpring = _config.MassKg * 120.0;
-                double cDamper = _config.MassKg * 22.0;
+                double kSpring = _config.MassKg * GroundContactConstants.SpringStiffnessPerKg;
+                double cDamper = _config.MassKg * GroundContactConstants.DamperRatePerKg;
                 double normalForceUp = System.Math.Max(0.0, kSpring * depth + cDamper * System.Math.Max(0.0, vNed.Z));
 
                 bool isRollingWheeled = _config.Category == VehicleAirframeCategory.FixedWing ||
@@ -397,13 +398,13 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 if (isRollingWheeled)
                 {
                     // Wheeled aircraft runway rolling resistance: mu_roll ~ 0.025 on paved runway
-                    double muRoll = 0.025;
+                    double muRoll = GroundContactConstants.PavedRunwayRollingFrictionMu;
                     double fRoll = muRoll * normalForceUp;
                     fxFrictionNed = -fRoll * System.Math.Tanh(3.0 * vNed.X);
 
                     // Lateral tire steering grip with symmetric Coulomb limit (mu_lat ~ 0.7)
-                    double maxFy = normalForceUp * 0.7;
-                    fyFrictionNed = -System.Math.Max(-maxFy, System.Math.Min(maxFy, cDamper * 0.5 * vNed.Y));
+                    double maxFy = normalForceUp * GroundContactConstants.LateralTireFrictionMu;
+                    fyFrictionNed = -System.Math.Clamp(cDamper * 0.5 * vNed.Y, -maxFy, maxFy);
                 }
                 else
                 {
@@ -613,7 +614,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
             }
 
             double alpha = System.Math.Atan2(vAirRelFrd.Z, System.Math.Max(0.2, System.Math.Abs(vAirRelFrd.X)));
-            double beta = System.Math.Asin(System.Math.Max(-1.0, System.Math.Min(1.0, vAirRelFrd.Y / vMag)));
+            double beta = System.Math.Asin(System.Math.Clamp(vAirRelFrd.Y / vMag, -1.0, 1.0));
 
             double qDyn = 0.5 * atm.DensityKgPerM3 * vMag * vMag;
             double sRef = _bakedDb.ReferenceAreaSqM;
@@ -675,7 +676,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 var r = _config.Rotors[i];
                 int ch = r.ActuatorChannelIndex;
                 double cmd = (ch >= 0 && ch < State.ActuatorControlsNormalized.Length)
-                    ? System.Math.Max(0.0, System.Math.Min(1.0, State.ActuatorControlsNormalized[ch]))
+                    ? System.Math.Clamp(State.ActuatorControlsNormalized[ch], 0.0, 1.0)
                     : 0.0;
 
                 double targetRpm = cmd > 0.01
@@ -720,7 +721,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
             if (vMag > 0.1)
             {
                 State.AlphaRad = System.Math.Atan2(vAir.Z, System.Math.Max(0.05, System.Math.Abs(vAir.X)));
-                State.BetaRad = System.Math.Asin(System.Math.Max(-1.0, System.Math.Min(1.0, vAir.Y / vMag)));
+                State.BetaRad = System.Math.Asin(System.Math.Clamp(vAir.Y / vMag, -1.0, 1.0));
             }
             else
             {

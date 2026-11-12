@@ -167,15 +167,15 @@ namespace FlightDynamics6DoF.Core.Gnc
                 Vec3d posErr = TargetPositionNed - state.PositionNed;
                 Vec3d vHoriz = new Vec3d(posErr.X * KpPosXY, posErr.Y * KpPosXY, 0.0);
                 vHoriz = Vec3d.ClampMagnitude(vHoriz, MaxHorizontalSpeedMps);
-                double vz = System.Math.Max(-MaxVerticalSpeedMps, System.Math.Min(MaxVerticalSpeedMps, posErr.Z * KpPosZ));
+                double vz = System.Math.Clamp(posErr.Z * KpPosZ, -MaxVerticalSpeedMps, MaxVerticalSpeedMps);
                 velDesNed = new Vec3d(vHoriz.X, vHoriz.Y, vz);
             }
             else if (CurrentMode == AutopilotFlightMode.AutoLand)
             {
                 Vec3d posErr = TargetPositionNed - state.PositionNed;
                 velDesNed = new Vec3d(
-                    System.Math.Max(-2.0, System.Math.Min(2.0, posErr.X * KpPosXY)),
-                    System.Math.Max(-2.0, System.Math.Min(2.0, posErr.Y * KpPosXY)),
+                    System.Math.Clamp(posErr.X * KpPosXY, -2.0, 2.0),
+                    System.Math.Clamp(posErr.Y * KpPosXY, -2.0, 2.0),
                     0.65); // Descend at 0.65 m/s (+Down)
                 if (state.IsGrounded && state.AltitudeAglMeters < 0.05)
                 {
@@ -203,7 +203,7 @@ namespace FlightDynamics6DoF.Core.Gnc
                 // Clamp tilt acceleration to max 35 deg tilt
                 double maxHorizAccel = gravity * System.Math.Tan(35.0 * FrameConverter.Deg2Rad);
                 Vec3d aHoriz = Vec3d.ClampMagnitude(new Vec3d(ax, ay, 0.0), maxHorizAccel);
-                double aUp = System.Math.Max(0.2 * gravity, System.Math.Min(2.2 * gravity, gravity - az));
+                double aUp = System.Math.Clamp(gravity - az, 0.2 * gravity, 2.2 * gravity);
 
                 double desiredRoll = System.Math.Atan2(
                     -aHoriz.X * System.Math.Sin(TargetYawRad) + aHoriz.Y * System.Math.Cos(TargetYawRad),
@@ -263,13 +263,12 @@ namespace FlightDynamics6DoF.Core.Gnc
             Vec3d euler = state.AttitudeBodyToNed.ToEulerZyx();
 
             double headingErr = desiredCourse - euler.Z;
-            while (headingErr > System.Math.PI) headingErr -= 2.0 * System.Math.PI;
-            while (headingErr < -System.Math.PI) headingErr += 2.0 * System.Math.PI;
+            headingErr = headingErr - 2.0 * System.Math.PI * System.Math.Floor((headingErr + System.Math.PI) / (2.0 * System.Math.PI));
 
-            double desiredRoll = System.Math.Max(-0.6, System.Math.Min(0.6, 1.2 * headingErr));
+            double desiredRoll = System.Math.Clamp(1.2 * headingErr, -0.6, 0.6);
             double altErrUp = -posErr.Z;
             double desiredPitch = (db.TrimAlphaDeg * FrameConverter.Deg2Rad) +
-                                  System.Math.Max(-0.35, System.Math.Min(0.35, 0.05 * altErrUp));
+                                  System.Math.Clamp(0.05 * altErrUp, -0.35, 0.35);
 
             Quatd qDes = Quatd.FromEulerZyx(desiredRoll, desiredPitch, euler.Z);
             Vec3d attErr = Quatd.AttitudeErrorBody(state.AttitudeBodyToNed, qDes);
@@ -282,7 +281,7 @@ namespace FlightDynamics6DoF.Core.Gnc
                 1.5 * rateErr.Z);
 
             double speedErr = config.DesignCruiseSpeedMps - state.AirspeedMps;
-            double throttle = System.Math.Max(0.15, System.Math.Min(1.0, db.TrimThrottleNormalized + 0.08 * speedErr));
+            double throttle = System.Math.Clamp(db.TrimThrottleNormalized + 0.08 * speedErr, 0.15, 1.0);
 
             WrenchControlAllocator.AllocateActuators(
                 config, db, momentCmd, 0.0, throttle, state.AirspeedMps, outControls16);

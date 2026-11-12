@@ -44,7 +44,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
         {
             double omega = System.Math.Max(0.0, rpm * (2.0 * System.Math.PI / 60.0));
             double rTip = System.Math.Max(0.02, rotor.Radius);
-            double rHub = System.Math.Max(0.002, System.Math.Min(rotor.HubRadius, 0.5 * rTip));
+            double rHub = System.Math.Clamp(rotor.HubRadius, 0.002, 0.5 * rTip);
             double diameter = 2.0 * rTip;
             double nRevPerSec = rpm / 60.0;
 
@@ -167,7 +167,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             double cqNonDim = totalTorque / (rho * n2 * d5);
             double cpNonDim = 2.0 * System.Math.PI * cqNonDim;
             double eta = cpNonDim > 1e-6 && advanceRatioJ > 0.01
-                ? System.Math.Max(0.0, System.Math.Min(0.92, (ctNonDim * advanceRatioJ) / cpNonDim))
+                ? System.Math.Clamp((ctNonDim * advanceRatioJ) / cpNonDim, 0.0, 0.92)
                 : 0.0;
 
             return new RotorBemtSolution
@@ -313,7 +313,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
 
             // Tangential induction factor a'
             double kPrime = (sigma * ct) / System.Math.Max(1e-4, 4.0 * prandtlF * sinPhi * cosPhi);
-            double aPrime = System.Math.Max(-0.2, System.Math.Min(0.4, kPrime / (1.0 + System.Math.Abs(kPrime))));
+            double aPrime = System.Math.Clamp(kPrime / (1.0 + System.Math.Abs(kPrime)), -0.2, 0.4);
             double uTangential = vRot * (1.0 - aPrime);
 
             // Universal hover + axial-flow momentum balance:
@@ -329,7 +329,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
         {
             double absSin = System.Math.Max(0.02, System.Math.Abs(sinPhi));
             double f = (0.5 * numBlades) * (isTip ? (rEdge - r) / r : (r - rEdge) / rEdge) / absSin;
-            f = System.Math.Max(0.0, System.Math.Min(20.0, f));
+            f = System.Math.Clamp(f, 0.0, 20.0);
             return (2.0 / System.Math.PI) * System.Math.Acos(System.Math.Min(1.0, System.Math.Exp(-f)));
         }
     }

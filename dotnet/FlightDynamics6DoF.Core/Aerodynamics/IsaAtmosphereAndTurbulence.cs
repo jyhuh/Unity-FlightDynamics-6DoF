@@ -20,13 +20,13 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
     /// </summary>
     public class IsaAtmosphereAndTurbulence
     {
-        public const double SeaLevelTempK = 288.15;
-        public const double SeaLevelPressurePa = 101325.0;
-        public const double SeaLevelDensity = 1.225;
-        public const double LapseRateKPerM = 0.0065;
-        public const double GasConstantR = 287.05287;
-        public const double GammaAir = 1.4;
-        public const double GravityMps2 = 9.80665;
+        public const double SeaLevelTempK = PhysicalConstants.SeaLevelTempK;
+        public const double SeaLevelPressurePa = PhysicalConstants.SeaLevelPressurePa;
+        public const double SeaLevelDensity = PhysicalConstants.SeaLevelDensityKgM3;
+        public const double LapseRateKPerM = PhysicalConstants.LapseRateKPerM;
+        public const double GasConstantR = PhysicalConstants.GasConstantR;
+        public const double GammaAir = PhysicalConstants.GammaAir;
+        public const double GravityMps2 = PhysicalConstants.GravityMps2;
 
         private readonly Random _rng;
         private Vec3d _turbulenceStateBody;
@@ -39,7 +39,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
 
         public static AtmosphereState Evaluate(double altitudeMslMeters)
         {
-            double h = System.Math.Max(-500.0, System.Math.Min(altitudeMslMeters, 20000.0));
+            double h = System.Math.Clamp(altitudeMslMeters, -500.0, 20000.0);
             double tempK;
             double pressurePa;
 
@@ -79,7 +79,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             double l = System.Math.Max(0.005, characteristicLengthM);
             double re = (atm.DensityKgPerM3 * v * l) / atm.DynamicViscosityPaS;
             // Clamp to specification operational range [10^4, 10^7]
-            return System.Math.Max(1.0e4, System.Math.Min(re, 1.0e7));
+            return System.Math.Clamp(re, 1.0e4, 1.0e7);
         }
 
         public static double ComputeMach(double airspeedMps, AtmosphereState atm)
@@ -99,7 +99,9 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                 return Vec3d.Zero;
 
             // When resting on or near the ground, atmospheric surface boundary layer heavily dampens gust turbulence
-            double groundAtten = System.Math.Max(0.0, System.Math.Min(1.0, (altitudeAglMeters - 0.05) / 1.5));
+            double groundAtten = System.Math.Clamp(
+                (altitudeAglMeters - GroundContactConstants.BoundaryLayerFloorMeters) / GroundContactConstants.BoundaryLayerHeightMeters,
+                0.0, 1.0);
             if (groundAtten <= 0.001)
             {
                 _turbulenceStateBody = Vec3d.Zero;

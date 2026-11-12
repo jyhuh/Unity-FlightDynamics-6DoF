@@ -174,10 +174,8 @@ namespace FlightDynamics6DoF.Core.Math
             double cosrCosp = 1.0 - 2.0 * (X * X + Y * Y);
             double roll = System.Math.Atan2(sinrCosp, cosrCosp);
 
-            double sinp = 2.0 * (W * Y - Z * X);
-            double pitch = System.Math.Abs(sinp) >= 1.0
-                ? (sinp >= 0.0 ? System.Math.PI / 2.0 : -System.Math.PI / 2.0)
-                : System.Math.Asin(sinp);
+            double sinp = System.Math.Clamp(2.0 * (W * Y - Z * X), -1.0, 1.0);
+            double pitch = System.Math.Asin(sinp);
 
             double sinyCosp = 2.0 * (W * Z + X * Y);
             double cosyCosp = 1.0 - 2.0 * (Y * Y + Z * Z);
@@ -373,11 +371,10 @@ namespace FlightDynamics6DoF.Core.Math
     /// </summary>
     public static class FrameConverter
     {
-        private const double Wgs84A = 6378137.0;
-        private const double Wgs84F = 1.0 / 298.257223563;
-        private const double Wgs84E2 = Wgs84F * (2.0 - Wgs84F);
-        public const double Deg2Rad = System.Math.PI / 180.0;
-        public const double Rad2Deg = 180.0 / System.Math.PI;
+        private const double Wgs84A = Wgs84Constants.SemiMajorAxisM;
+        private const double Wgs84E2 = Wgs84Constants.EccentricitySquaredE2;
+        public const double Deg2Rad = MathConstants.Deg2Rad;
+        public const double Rad2Deg = MathConstants.Rad2Deg;
 
         /// <summary>
         /// Converts NED position (North, East, Down) [m] to Unity world position (X=East, Y=Up=-Down, Z=North) [m].

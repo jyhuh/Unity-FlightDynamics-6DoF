@@ -43,7 +43,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             // 1. Component Build-up Parasitic Drag CD0 = (Cf * FF * Q * Swet) / Sref + MiscDeltaCd0
             double cfTurb = 0.455 / (System.Math.Pow(System.Math.Log10(reL), 2.58) * System.Math.Pow(1.0 + 0.144 * mach * mach, 0.65));
             double finenessRatio = fuselage.Length / System.Math.Max(0.02, fuselage.MaxDiameter);
-            double fClamped = System.Math.Max(1.5, System.Math.Min(finenessRatio, 20.0));
+            double fClamped = System.Math.Clamp(finenessRatio, 1.5, 20.0);
             double formFactor = 1.0 + 60.0 / System.Math.Pow(fClamped, 3) + fClamped / 400.0;
 
             double cd0Fuselage = (cfTurb * formFactor * fuselage.InterferenceFactorQ * fuselage.WettedArea) / sRef + fuselage.MiscDeltaCd0;
@@ -68,7 +68,7 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
 
             double qDyn = 0.5 * atm.DensityKgPerM3 * vMag * vMag;
             double alpha = System.Math.Atan2(velocityRelativeAirFrd.Z, System.Math.Max(0.1, System.Math.Abs(velocityRelativeAirFrd.X)));
-            double beta = System.Math.Asin(System.Math.Max(-1.0, System.Math.Min(1.0, velocityRelativeAirFrd.Y / vMag)));
+            double beta = System.Math.Asin(System.Math.Clamp(velocityRelativeAirFrd.Y / vMag, -1.0, 1.0));
 
             // 3. Cross-Flow Principle + Skin Friction Forces along FRD axes
             double u = velocityRelativeAirFrd.X;

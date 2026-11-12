@@ -286,6 +286,71 @@
             Converts WGS84 (Lat [deg], Lon [deg], Alt MSL [m]) to local NED position [m] relative to reference origin.
             </summary>
         </member>
+        <member name="T:FlightDynamics6DoF.Core.Math.MathConstants">
+            <summary>
+            Mathematical and angular conversion constants.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Math.PhysicalConstants">
+            <summary>
+            Standard physical and atmospheric constants based on the International Standard Atmosphere (ISA).
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Math.Wgs84Constants">
+            <summary>
+            World Geodetic System 1984 (WGS-84) Earth reference ellipsoid constants.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Math.GroundContactConstants">
+            <summary>
+            Runway ground contact, landing gear friction, and surface boundary layer constants.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.PavedRunwayRollingFrictionMu">
+            <summary>
+            Coulomb rolling friction coefficient on paved asphalt/concrete runway (~0.025).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.LateralTireFrictionMu">
+            <summary>
+            Coulomb lateral tire cornering friction limit (~0.70).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.SpringStiffnessPerKg">
+            <summary>
+            Compliant ground contact spring stiffness multiplier per unit vehicle mass (120 N/m per kg).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.DamperRatePerKg">
+            <summary>
+            Compliant ground contact vertical damper multiplier per unit vehicle mass (22 N/(m/s) per kg).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.ParkingBrakeThrottleThreshold">
+            <summary>
+            Throttle threshold below which parking brake / resting ground hold is engaged (&lt; 5%).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.NoseGearPitchDownLimitRad">
+            <summary>
+            Pitch floor angle in aerospace FRD coordinates preventing nose-gear ground penetration (0.015 rad).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.BoundaryLayerHeightMeters">
+            <summary>
+            Surface atmospheric boundary layer height over which wind gusts ramp from zero to full intensity (1.5 m).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.BoundaryLayerFloorMeters">
+            <summary>
+            Height AGL below which gust turbulence is quenched to zero (0.05 m).
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Math.NetworkConstants">
+            <summary>
+            Standard network ports and protocols for PX4 SITL, QGroundControl, and ROS 2 communication.
+            </summary>
+        </member>
         <member name="T:FlightDynamics6DoF.Core.Aerodynamics.StabilityAndTrimAnalyzer">
             <summary>
             Module 5 &amp; Stage 1 Pipeline: Full-Aircraft Pre-Simulation Geometry, Aerodynamic, Stability &amp; Trim Analyzer.

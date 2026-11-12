@@ -5,7 +5,7 @@
 [![Runtime: .NET Standard 2.1](https://img.shields.io/badge/.NET%20Standard-2.1-512BD4.svg?logo=dotnet)](https://dotnet.microsoft.com/)
 [![PX4 Autopilot SITL](https://img.shields.io/badge/PX4-v1.15%20SITL-orange.svg?logo=drone)](https://px4.io/)
 [![ROS 2](https://img.shields.io/badge/ROS%202-Humble%20Hawksbill-22314E.svg?logo=ros)](https://www.ros.org/)
-[![Automated Assertions](https://img.shields.io/badge/Tests-190%20Passing-brightgreen.svg)](dotnet/FlightDynamics6DoF.Tests/)
+[![Automated Assertions](https://img.shields.io/badge/Tests-196%20Passing-brightgreen.svg)](dotnet/FlightDynamics6DoF.Tests/)
 
 **FlightDynamics 6-DOF** is a high-fidelity aerospace flight dynamics and simulation engineering suite for Unity. It combines offline aerodynamic polar generation (CST parametric airfoils, 3D Vortex Lattice Method, and CCBlade BEMT) with real-time multi-fidelity 6-DOF RK4 integration, zero-dependency MAVLink v2 lockstep communication, and a lightweight containerized PX4 Autopilot SITL stack optimized for macOS (Apple Silicon / Intel).
 
@@ -93,7 +93,7 @@ flowchart TD
 - **.NET SDK**: .NET 8 or 9 SDK (for building the core dynamics assembly).
 
 ### 2. Build the Core Dynamics Engine
-Verify all 190 automated assertions and build the managed assemblies:
+Verify all 196 automated assertions and build the managed assemblies:
 
 ```bash
 git clone git@github.com:jyhuh/UnityDrone.git
@@ -158,7 +158,7 @@ UnityDrone/
 │   └── ros2-integration.md        # ROS 2 Autonomy & uORB Topic Guide
 ├── dotnet/
 │   ├── FlightDynamics6DoF.Core/   # Pure C# .NET Standard 2.1 Core Physics Engine
-│   └── FlightDynamics6DoF.Tests/  # 190 Automated Unit & Dynamics Test Assertions
+│   └── FlightDynamics6DoF.Tests/  # 196 Automated Unit & Dynamics Test Assertions
 ├── Packages/
 │   └── com.aerospace.flightdynamics6dof/ # UPM Distribution Package
 ├── scripts/
