@@ -87,6 +87,14 @@ ensure_colima_containerd() {
       --cpu 4 \
       --memory 8
   fi
+
+  # Ensure containerd runtime service inside Colima VM is active and accessible
+  if ! colima --profile "$COLIMA_PROFILE" nerdctl -- version >/dev/null 2>&1; then
+    echo "[Colima] containerd runtime service inactive inside VM. Reviving systemd containerd.service..."
+    colima ssh --profile "$COLIMA_PROFILE" -- sudo systemctl restart containerd || true
+    colima ssh --profile "$COLIMA_PROFILE" -- sudo systemctl enable containerd || true
+    sleep 1
+  fi
 }
 
 nerdctl_cmd() {
@@ -240,6 +248,51 @@ case "$ACTION" in
       colima_cleanup_containers
       echo "[Success] Both containers stopped (Colima VM is kept warm for fast restarts)."
       echo "  -> To completely stop the Colima VM profile: ./scripts/px4-sitl.sh vm-stop"
+    fi
+    ;;
+
+  vm-start)
+    if [[ "$BACKEND" == "apple" ]]; then
+      ensure_apple_container
+      echo "[Apple Container] Apple virtualization system ready."
+    else
+      ensure_colima_containerd
+      echo "[Colima containerd] '${COLIMA_PROFILE}' VM and containerd runtime are running and healthy."
+    fi
+    ;;
+
+  vm-status)
+    if [[ "$BACKEND" == "apple" ]]; then
+      echo "[Apple Container Status]"
+      container ps 2>&1 || true
+    else
+      echo "[Colima Profile Status]"
+      colima status --profile "$COLIMA_PROFILE" 2>&1 || true
+      echo ""
+      echo "[VM containerd Service Status]"
+      colima ssh --profile "$COLIMA_PROFILE" -- systemctl status containerd --no-pager 2>&1 | head -n 12 || true
+      echo ""
+      echo "[Running Containers via nerdctl]"
+      nerdctl_cmd ps -a 2>&1 || true
+    fi
+    ;;
+
+  vm-repair)
+    if [[ "$BACKEND" == "apple" ]]; then
+      ensure_apple_container
+      echo "[Apple Container] Repaired system runtime."
+    else
+      echo "[Colima containerd] Repairing and restarting containerd inside '${COLIMA_PROFILE}' VM..."
+      ensure_colima_containerd
+      colima ssh --profile "$COLIMA_PROFILE" -- sudo systemctl daemon-reload || true
+      colima ssh --profile "$COLIMA_PROFILE" -- sudo systemctl restart containerd || true
+      colima ssh --profile "$COLIMA_PROFILE" -- sudo systemctl enable containerd || true
+      sleep 1
+      if colima --profile "$COLIMA_PROFILE" nerdctl -- version >/dev/null 2>&1; then
+        echo "[Success] containerd service successfully repaired and operational!"
+      else
+        echo "[Warning] containerd service restarted, but check status with ./scripts/px4-sitl.sh vm-status"
+      fi
     fi
     ;;
 

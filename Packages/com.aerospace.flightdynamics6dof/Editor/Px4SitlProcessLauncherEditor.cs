@@ -21,6 +21,7 @@ namespace FlightDynamics6DoF.Editor
         private string _customCommand = "commander takeoff";
         private bool _showPxhFold = true;
         private bool _showContainerFold = true;
+        private bool _showVmFold = true;
 
         public override void OnInspectorGUI()
         {
@@ -64,14 +65,8 @@ namespace FlightDynamics6DoF.Editor
                 {
                     launcher.StopPx4SitlProcess();
                 }
-                if (GUILayout.Button("Shutdown Colima VM (flightdynamics)", GUILayout.Height(24)))
-                {
-                    launcher.ShutdownColimaVm();
-                }
                 GUI.backgroundColor = Color.white;
-                EditorGUILayout.EndHorizontal();
 
-                EditorGUILayout.BeginHorizontal();
                 if (GUILayout.Button("Open Live Container Logs in Terminal", GUILayout.Height(24)))
                 {
                     OpenLogsInTerminal(launcher.WorkspaceRootPath);
@@ -82,8 +77,47 @@ namespace FlightDynamics6DoF.Editor
 
             EditorGUILayout.Space(4);
 
-            // 2. Interactive pxh Command Console
-            _showPxhFold = EditorGUILayout.Foldout(_showPxhFold, "2. PX4 Shell (pxh) Quick Actions & Custom Command", true, EditorStyles.foldoutHeader);
+            // 2. Colima VM & containerd Runtime Service Management
+            _showVmFold = EditorGUILayout.Foldout(_showVmFold, "2. Colima VM & Containerd Runtime Daemon", true, EditorStyles.foldoutHeader);
+            if (_showVmFold)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.LabelField("Manage Colima macOS VM & internal systemd containerd.service", EditorStyles.miniLabel);
+
+                EditorGUILayout.BeginHorizontal();
+                if (GUILayout.Button("Check VM & Daemon Status", GUILayout.Height(26)))
+                {
+                    launcher.CheckVmStatus();
+                }
+
+                GUI.backgroundColor = new Color(0.4f, 1f, 0.7f);
+                if (GUILayout.Button("Repair containerd Service", GUILayout.Height(26)))
+                {
+                    launcher.RepairContainerdService();
+                }
+                GUI.backgroundColor = Color.white;
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUILayout.BeginHorizontal();
+                if (GUILayout.Button("Start Colima VM (flightdynamics)", GUILayout.Height(24)))
+                {
+                    launcher.StartColimaVm();
+                }
+                GUI.backgroundColor = new Color(1f, 0.5f, 0.5f);
+                if (GUILayout.Button("Shutdown Colima VM", GUILayout.Height(24)))
+                {
+                    launcher.ShutdownColimaVm();
+                }
+                GUI.backgroundColor = Color.white;
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUILayout.EndVertical();
+            }
+
+            EditorGUILayout.Space(4);
+
+            // 3. Interactive pxh Command Console
+            _showPxhFold = EditorGUILayout.Foldout(_showPxhFold, "3. PX4 Shell (pxh) Quick Actions & Custom Command", true, EditorStyles.foldoutHeader);
             if (_showPxhFold)
             {
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
@@ -133,9 +167,9 @@ namespace FlightDynamics6DoF.Editor
 
             EditorGUILayout.Space(4);
 
-            // 3. ROS 2 Humble Offboard Actions
+            // 4. ROS 2 Humble Offboard Actions
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("3. ROS 2 Humble Offboard Node", EditorStyles.boldLabel);
+            GUILayout.Label("4. ROS 2 Humble Offboard Node", EditorStyles.boldLabel);
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Start Offboard Orbit Node (10m Alt, 8m R)"))
                 launcher.StartRos2OffboardNode(10.0f, 8.0f);

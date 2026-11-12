@@ -391,18 +391,50 @@ namespace FlightDynamics6DoF.Unity
         }
 
         /// <summary>
+        /// Boots and ensures the Colima VM (flightdynamics profile) and containerd runtime are ready.
+        /// </summary>
+        public void StartColimaVm()
+        {
+            RunVmAction("vm-start", "Starting / verifying Colima VM and containerd runtime...");
+        }
+
+        /// <summary>
+        /// Checks the health status of Colima VM, systemd containerd.service, and nerdctl containers.
+        /// Output is piped to Unity console log and HUD summary.
+        /// </summary>
+        public void CheckVmStatus()
+        {
+            RunVmAction("vm-status", "Checking Colima VM & containerd service status...");
+        }
+
+        /// <summary>
+        /// Force reloads systemd, restarts containerd, and re-enables containerd.service inside the Colima VM.
+        /// Useful when containerd enters an inactive/dead state.
+        /// </summary>
+        public void RepairContainerdService()
+        {
+            RunVmAction("vm-repair", "Repairing and restarting containerd daemon inside Colima VM...");
+        }
+
+        /// <summary>
         /// Completely stops active containers and shuts down the Colima VM profile (reclaiming Mac RAM and CPU).
         /// </summary>
         public void ShutdownColimaVm()
         {
             StopRos2OffboardNode();
+            _containerStackMarkedRunning = false;
+            RunVmAction("vm-stop", "Completely shut down Colima VM profile (flightdynamics).");
+        }
+
+        private bool RunVmAction(string actionVerb, string summaryMessage)
+        {
             try
             {
                 string envPrefix = GetBackendEnvPrefix();
                 var psi = new ProcessStartInfo
                 {
                     FileName = "/bin/bash",
-                    Arguments = $"-lc \"{envPrefix}'{ManagerScriptPath}' vm-stop\"",
+                    Arguments = $"-lc \"{envPrefix}'{ManagerScriptPath}' {actionVerb}\"",
                     WorkingDirectory = WorkspaceRootPath,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
@@ -412,18 +444,21 @@ namespace FlightDynamics6DoF.Unity
                 var proc = Process.Start(psi);
                 if (proc != null)
                 {
+                    proc.EnableRaisingEvents = true;
                     proc.OutputDataReceived += (_, e) => { if (!string.IsNullOrEmpty(e.Data)) _consoleLines.Enqueue(e.Data); };
                     proc.ErrorDataReceived += (_, e) => { if (!string.IsNullOrEmpty(e.Data)) _consoleLines.Enqueue(e.Data); };
                     proc.BeginOutputReadLine();
                     proc.BeginErrorReadLine();
                 }
-                _containerStackMarkedRunning = false;
-                _lastConsoleSummary = "Completely shut down Colima VM profile (flightdynamics).";
+                _lastConsoleSummary = summaryMessage;
                 Debug.Log($"[FlightDynamics6DoF] {_lastConsoleSummary}");
+                return true;
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[FlightDynamics6DoF] Failed shutting down Colima VM: {ex.Message}");
+                _lastConsoleSummary = $"Action '{actionVerb}' failed: {ex.Message}";
+                Debug.LogWarning($"[FlightDynamics6DoF] {_lastConsoleSummary}");
+                return false;
             }
         }
 

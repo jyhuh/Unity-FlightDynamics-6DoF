@@ -287,6 +287,18 @@ namespace FlightDynamics6DoF.Unity
                     Px4Launcher.SendPxhCommand("commander land");
                 GUILayout.EndHorizontal();
 
+                // Colima VM & Daemon Control
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button("VM Status"))
+                    Px4Launcher.CheckVmStatus();
+                GUI.backgroundColor = new Color(0.4f, 1f, 0.7f);
+                if (GUILayout.Button("Repair containerd"))
+                    Px4Launcher.RepairContainerdService();
+                GUI.backgroundColor = Color.white;
+                if (GUILayout.Button("Start VM"))
+                    Px4Launcher.StartColimaVm();
+                GUILayout.EndHorizontal();
+
                 // VTOL Specific Controls
                 if (PrimaryVehicle.ActiveConfig.Category == VehicleAirframeCategory.HybridQuadPlaneVtol ||
                     Px4Launcher.Px4AirframeModel.Contains("vtol"))
