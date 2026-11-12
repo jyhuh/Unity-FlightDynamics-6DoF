@@ -336,6 +336,33 @@
             Pitch floor angle in aerospace FRD coordinates preventing nose-gear ground penetration (0.015 rad).
             </summary>
         </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.WingtipStrikeRollLimitRad">
+            <summary>
+            Maximum allowable bank/roll angle in radians while landing gear wheels are on the runway (~3.0 deg = 0.052 rad).
+            Prevents wingtip strike and lateral ground roll-over.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.GearRollRestoringStiffnessPerKg">
+            <summary>
+            Landing gear track-width roll restoring stiffness per unit vehicle mass (35.0 N*m/rad per kg).
+            Resists motor reaction torque and prevents lateral tip-over on runway.
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.GearRollDampingRatePerKg">
+            <summary>
+            Landing gear roll damping rate per unit vehicle mass (6.0 N*m/(rad/s) per kg).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.NoseGearPitchRestoringStiffnessPerKg">
+            <summary>
+            Nose-gear pitch-up restoring stiffness per unit vehicle mass (25.0 N*m/rad per kg).
+            </summary>
+        </member>
+        <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.NoseGearPitchDampingRatePerKg">
+            <summary>
+            Nose-gear pitch damping rate per unit vehicle mass (4.0 N*m/(rad/s) per kg).
+            </summary>
+        </member>
         <member name="F:FlightDynamics6DoF.Core.Math.GroundContactConstants.BoundaryLayerHeightMeters">
             <summary>
             Surface atmospheric boundary layer height over which wind gusts ramp from zero to full intensity (1.5 m).

@@ -326,14 +326,40 @@ namespace FlightDynamics6DoF.Core.Dynamics
                     }
                     else
                     {
-                        // Landing gear pitch attitude constraints during takeoff ground roll:
-                        // Prevent nose gear penetration below runway (euler.Y > 0.015 rad is nose-down into ground in aerospace FRD)
-                        // while allowing takeoff rotation (euler.Y < 0 is nose-up)
+                        // Landing gear attitude constraints during takeoff ground roll:
                         Vec3d euler = State.AttitudeBodyToNed.ToEulerZyx();
-                        if (euler.Y > GroundContactConstants.NoseGearPitchDownLimitRad && State.AngularVelocityBodyFrd.Y > 0.0)
+
+                        // 1. Prevent nose gear penetration below runway (euler.Y > 0.015 rad is nose-down into ground in aerospace FRD)
+                        // while allowing takeoff rotation (euler.Y < 0 is nose-up)
+                        double wy = State.AngularVelocityBodyFrd.Y;
+                        if (euler.Y > GroundContactConstants.NoseGearPitchDownLimitRad && wy > 0.0)
                         {
-                            State.AngularVelocityBodyFrd = new Vec3d(State.AngularVelocityBodyFrd.X, 0.0, State.AngularVelocityBodyFrd.Z);
+                            wy = 0.0;
                         }
+
+                        // 2. Prevent wingtip strike and lateral rollover: main wheels firmly restrict roll angle on runway
+                        double roll = euler.X;
+                        double wx = State.AngularVelocityBodyFrd.X;
+                        double rollLimit = GroundContactConstants.WingtipStrikeRollLimitRad;
+
+                        if (System.Math.Abs(roll) > rollLimit)
+                        {
+                            double clampedRoll = System.Math.Clamp(roll, -rollLimit, rollLimit);
+                            State.AttitudeBodyToNed = Quatd.FromEulerZyx(clampedRoll, euler.Y, euler.Z);
+                            roll = clampedRoll;
+                        }
+
+                        if ((roll > 0.015 && wx > 0.0) || (roll < -0.015 && wx < 0.0))
+                        {
+                            wx = 0.0;
+                        }
+                        else
+                        {
+                            // Active roll damping while rolling on runway
+                            wx *= System.Math.Max(0.0, 1.0 - 15.0 * h);
+                        }
+
+                        State.AngularVelocityBodyFrd = new Vec3d(wx, wy, State.AngularVelocityBodyFrd.Z);
                     }
                 }
                 else
@@ -416,17 +442,36 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 Vec3d fContactNed = new Vec3d(fxFrictionNed, fyFrictionNed, -normalForceUp);
                 fContactFrd = qBodyToNed.RotateNedToBody(fContactNed);
 
+                Vec3d eulerContact = qBodyToNed.ToEulerZyx();
+
                 // Tricycle landing gear ground contact restores roll/yaw alignment while rolling
                 if (isRollingWheeled)
                 {
-                    mContactFrd = new Vec3d(
-                        -omegaBodyFrd.X * (_config.MassKg * 2.5),
-                        -omegaBodyFrd.Y * (_config.MassKg * 0.3),
-                        -omegaBodyFrd.Z * (_config.MassKg * 2.0));
+                    // Main gear wheel track separation generates powerful roll restoring moment (-k_roll * phi)
+                    // that balances engine reaction torque and prevents wingtip ground strike
+                    double kRoll = _config.MassKg * GroundContactConstants.GearRollRestoringStiffnessPerKg;
+                    double cRoll = _config.MassKg * GroundContactConstants.GearRollDampingRatePerKg;
+                    double mRoll = -kRoll * eulerContact.X - cRoll * omegaBodyFrd.X;
+
+                    // Nose gear prevents nose-down pitch penetration into runway while allowing rotation
+                    double kPitch = _config.MassKg * GroundContactConstants.NoseGearPitchRestoringStiffnessPerKg;
+                    double cPitch = _config.MassKg * GroundContactConstants.NoseGearPitchDampingRatePerKg;
+                    double mPitch = -cPitch * omegaBodyFrd.Y - (eulerContact.Y > 0.0 ? kPitch * eulerContact.Y : 0.0);
+
+                    // Directional tire stability and yaw damping along runway
+                    double mYaw = -omegaBodyFrd.Z * (_config.MassKg * 2.5);
+
+                    mContactFrd = new Vec3d(mRoll, mPitch, mYaw);
                 }
                 else
                 {
-                    mContactFrd = -omegaBodyFrd * (_config.MassKg * 0.4);
+                    // Multicopter resting on landing skids: roll and pitch leveling springs
+                    double kLevel = _config.MassKg * 20.0;
+                    double cLevel = _config.MassKg * 1.5;
+                    mContactFrd = new Vec3d(
+                        -kLevel * eulerContact.X - cLevel * omegaBodyFrd.X,
+                        -kLevel * eulerContact.Y - cLevel * omegaBodyFrd.Y,
+                        -omegaBodyFrd.Z * (_config.MassKg * 1.5));
                 }
             }
 

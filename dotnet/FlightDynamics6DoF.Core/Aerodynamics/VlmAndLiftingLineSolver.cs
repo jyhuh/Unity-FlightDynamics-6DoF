@@ -398,8 +398,20 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             switch (p.ControlType)
             {
                 case ControlSurfaceType.Aileron:
+                {
+                    // Dual aileron support (e.g., PX4 PWM_MAIN_FUNC6/7 on Ch 5 & Ch 6):
+                    // If a valid secondary aileron channel is actively driven, map left/right halves directly.
+                    int secChan = p.ControlChannel + 1;
+                    if (secChan < controls.Length && System.Math.Abs(controls[secChan]) > 1e-4 && p.IsRightHalf)
+                    {
+                        double secCmd = System.Math.Clamp(controls[secChan], -1.0, 1.0);
+                        return secCmd * p.MaxDeflectionRad;
+                    }
+
+                    // Single unified roll channel (e.g. Ch 5 / roll command):
                     // Positive roll command (+cmd) deflects right aileron UP (-Cl) and left aileron DOWN (+Cl)
                     return (p.IsRightHalf ? -1.0 : 1.0) * cmd * p.MaxDeflectionRad;
+                }
                 case ControlSurfaceType.Elevator:
                 case ControlSurfaceType.Flap:
                 case ControlSurfaceType.Rudder:

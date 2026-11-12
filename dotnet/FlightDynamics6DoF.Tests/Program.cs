@@ -257,8 +257,10 @@ namespace FlightDynamics6DoF.Tests
                 fwEngine.StepSimulation(stepDt);
             }
 
-            Console.WriteLine($"      Fixed-Wing Ground Roll (3.0s): Airspeed = {fwEngine.State.AirspeedMps:F2} m/s, X = {fwEngine.State.PositionNed.X:F2} m, Heading = {fwEngine.State.AttitudeBodyToNed.ToEulerZyx().Z * FrameConverter.Rad2Deg:F1} deg");
+            Vec3d groundRollEuler = fwEngine.State.AttitudeBodyToNed.ToEulerZyx();
+            Console.WriteLine($"      Fixed-Wing Ground Roll (3.0s): Airspeed = {fwEngine.State.AirspeedMps:F2} m/s, X = {fwEngine.State.PositionNed.X:F2} m, Roll = {groundRollEuler.X * FrameConverter.Rad2Deg:F2} deg, Heading = {groundRollEuler.Z * FrameConverter.Rad2Deg:F1} deg");
             AssertTrue(fwEngine.State.AirspeedMps > 10.0, $"Fixed-wing accelerates down runway (got {fwEngine.State.AirspeedMps:F2} m/s)");
+            AssertTrue(System.Math.Abs(groundRollEuler.X * FrameConverter.Rad2Deg) < 3.0, $"Fixed-wing maintains level wings during runway roll (Roll = {groundRollEuler.X * FrameConverter.Rad2Deg:F2} deg < 3.0 deg)");
 
             // Apply elevator pitch-up for rotation and liftoff
             fwControls[7] = -0.35; // Elevator pitch-up on Ch 7

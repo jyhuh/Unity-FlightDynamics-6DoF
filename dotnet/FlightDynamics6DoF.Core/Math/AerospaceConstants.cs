@@ -85,6 +85,33 @@ namespace FlightDynamics6DoF.Core.Math
         public const double NoseGearPitchDownLimitRad = 0.015;
 
         /// <summary>
+        /// Maximum allowable bank/roll angle in radians while landing gear wheels are on the runway (~3.0 deg = 0.052 rad).
+        /// Prevents wingtip strike and lateral ground roll-over.
+        /// </summary>
+        public const double WingtipStrikeRollLimitRad = 0.052;
+
+        /// <summary>
+        /// Landing gear track-width roll restoring stiffness per unit vehicle mass (35.0 N*m/rad per kg).
+        /// Resists motor reaction torque and prevents lateral tip-over on runway.
+        /// </summary>
+        public const double GearRollRestoringStiffnessPerKg = 35.0;
+
+        /// <summary>
+        /// Landing gear roll damping rate per unit vehicle mass (6.0 N*m/(rad/s) per kg).
+        /// </summary>
+        public const double GearRollDampingRatePerKg = 6.0;
+
+        /// <summary>
+        /// Nose-gear pitch-up restoring stiffness per unit vehicle mass (25.0 N*m/rad per kg).
+        /// </summary>
+        public const double NoseGearPitchRestoringStiffnessPerKg = 25.0;
+
+        /// <summary>
+        /// Nose-gear pitch damping rate per unit vehicle mass (4.0 N*m/(rad/s) per kg).
+        /// </summary>
+        public const double NoseGearPitchDampingRatePerKg = 4.0;
+
+        /// <summary>
         /// Surface atmospheric boundary layer height over which wind gusts ramp from zero to full intensity (1.5 m).
         /// </summary>
         public const double BoundaryLayerHeightMeters = 1.5;
