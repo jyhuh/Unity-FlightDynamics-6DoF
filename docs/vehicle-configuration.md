@@ -107,3 +107,11 @@ spec.Wings.Add(new WingSurfaceSpec
 // Bake Aerodynamic Polar Database
 BakedAeroDatabase db = StabilityAndTrimAnalyzer.AnalyzeAndBake(spec);
 ```
+
+---
+
+## 5. Workbench Airframe Tuning & Telemetry Logs
+
+- **Step 1 (`AeroDesignPanel`)**: Switch airframes (`iris`, `plane`, `standard_vtol`), run Stage-1 aerodynamic baking, inspect BEMT/2D airfoil polars, or import/export `AircraftConfigSpec` JSON.
+- **Step 4 (`Px4TuningPanel`)**: Tune per-airframe `AirframeControlParameterTable` gains (`MC_*`, `FW_*`, `MPC_*`, `TECS_*`) and export `.params` directly to `docker/config/` for PX4 SITL.
+- **Step 5 (`TelemetryLogPanel`) & Retention (`FlightLogSettingsWindow`)**: Inspect live telemetry plots and manage `Assets/FlightLogs/` CSV/HTML retention limits via **`Tools > FlightDynamics 6-DOF > Log & Retention Settings...`**.

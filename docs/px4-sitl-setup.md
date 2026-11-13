@@ -85,18 +85,18 @@ Manage the SITL stack from your terminal:
 
 ---
 
-## 4. Unity Editor In-Inspector Controls
+## 4. Unity Editor Workbench Controls
 
-You can control all container actions directly inside the Unity Editor without opening a terminal:
+You can control all container, PX4, and simulation actions directly inside the Unity Editor without opening a terminal:
 
-1. Select `FlightDynamicsVehicle_UAV` in the Scene Hierarchy.
-2. Locate the **`Px4SitlProcessLauncher`** component in the Inspector:
-   - **`Start Quadcopter (iris)`**: Launches container with multirotor airframe.
-   - **`Start Fixed-Wing (plane)`**: Launches container with runway-takeoff fixed-wing airframe.
-   - **`Start QuadPlane (standard_vtol)`**: Launches container with VTOL airframe.
-   - **`Stop Containers (Keep VM warm)`**: Stops PX4/ROS2 containers while keeping Colima running.
-   - **`Shutdown Colima VM (flightdynamics)`**: Completely shuts down the Colima VM to release system memory.
-   - **`pxh>` Input Field**: Type any PX4 shell command (e.g. `commander arm`) and click **Send**.
+1. Open **`Tools > FlightDynamics 6-DOF > Unified 5-Step Engineering Workbench`** (`FlightDynamicsEngineeringWizard`).
+2. Check the live status strip at the top (`VM`, `containerd`, `unity-px4-sitl`, `unity-ros2-dds`, and `시뮬레이션`), updated asynchronously by `SitlInfraController`.
+3. In **Step 2 (`2. 인프라`)**:
+   - **`▶ 인프라 전체 시작 (<model>)`**: Starts the Colima/Apple container runtime, `unity-ros2-dds`, and `unity-px4-sitl` with the selected airframe (`iris`, `plane`, or `standard_vtol`).
+   - **`■ 인프라 전체 중지 (컨테이너 정지)`**: Stops PX4/ROS 2 containers while keeping the VM warm for rapid restarts.
+   - **Advanced Foldout**: Individual PX4/ROS 2 start/stop, `rootfs_*` cache reset, `vm-status`/`vm-repair`/`vm-start`/`vm-stop`, and live console log viewer.
+4. In **Step 4 (`4. PX4 튜닝`)**:
+   - **`pxh>` Input Field & Quick Buttons**: Send `commander arm`, `takeoff`, `land`, `vtol_transition`, or custom NuttX shell commands.
 
 ---
 
