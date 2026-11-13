@@ -48,7 +48,7 @@ namespace FlightDynamics6DoF.Core.Gnc
 
         // Outer position & velocity loop gains (Multirotor / VTOL MC)
         public double KpPosXY = 1.25;
-        public double KpPosZ = 1.60;
+        public double KpPosZ = 1.00;
         public double KpVelXY = 3.20;
         public double KiVelXY = 0.45;
         public double KdVelXY = 0.25;
@@ -56,13 +56,13 @@ namespace FlightDynamics6DoF.Core.Gnc
         public double KiVelZ = 1.20;
         public double KdVelZ = 0.40;
 
-        // Multirotor attitude & rate gains
-        public double McRollPitchP = 6.50;
+        // Multirotor attitude & rate gains (tuned for 50 Hz Unity lockstep SITL)
+        public double McRollPitchP = 4.00;
         public double McYawP = 2.80;
-        public double McRollPitchRateP = 0.22;
-        public double McRollPitchRateI = 0.08;
-        public double McRollPitchRateD = 0.006;
-        public double McYawRateP = 0.15;
+        public double McRollPitchRateP = 0.07;
+        public double McRollPitchRateI = 0.05;
+        public double McRollPitchRateD = 0.001;
+        public double McYawRateP = 0.12;
         public double McYawRateI = 0.04;
 
         // Fixed-Wing / VTOL FW attitude, rate, TECS & runway takeoff gains
@@ -383,7 +383,11 @@ namespace FlightDynamics6DoF.Core.Gnc
                 var r = config.Rotors[i];
                 double kt = (i < db.RotorLumpedKt.Length) ? db.RotorLumpedKt[i] : 1.5e-5;
                 double kq = (i < db.RotorLumpedKq.Length) ? db.RotorLumpedKq[i] : 2.5e-7;
-                double km = (kq / System.Math.Max(1e-7, kt)) * r.RotationDirection;
+                double omegaMax = r.MaxRpm * FlightDynamics6DoF.Core.Math.MathConstants.RpmToRadPerSec;
+                // PX4 CA_ROTOR*_CT is max thrust in Newtons at u=1 (Thrust = CT * u^2), not N/(rad/s)^2
+                double ctNewton = System.Math.Clamp(kt * omegaMax * omegaMax, 0.5, 100.0);
+                // PX4 CA_ROTOR*_KM requires >0 for CCW (RotationDirection=-1) and <0 for CW (+1)
+                double km = -(kq / System.Math.Max(1e-7, kt)) * r.RotationDirection;
 
                 sb.AppendLine($"param set CA_ROTOR{i}_PX {r.MountPositionFrd.X.ToString("F4", inv)}");
                 sb.AppendLine($"param set CA_ROTOR{i}_PY {r.MountPositionFrd.Y.ToString("F4", inv)}");
@@ -391,7 +395,7 @@ namespace FlightDynamics6DoF.Core.Gnc
                 sb.AppendLine($"param set CA_ROTOR{i}_AX {r.ThrustAxisFrd.X.ToString("F4", inv)}");
                 sb.AppendLine($"param set CA_ROTOR{i}_AY {r.ThrustAxisFrd.Y.ToString("F4", inv)}");
                 sb.AppendLine($"param set CA_ROTOR{i}_AZ {r.ThrustAxisFrd.Z.ToString("F4", inv)}");
-                sb.AppendLine($"param set CA_ROTOR{i}_CT {kt.ToString("E4", inv)}");
+                sb.AppendLine($"param set CA_ROTOR{i}_CT {ctNewton.ToString("F4", inv)}");
                 sb.AppendLine($"param set CA_ROTOR{i}_KM {km.ToString("F4", inv)}");
             }
 
@@ -470,7 +474,11 @@ namespace FlightDynamics6DoF.Core.Gnc
                 sb.AppendLine($"param set MC_PITCH_P {McRollPitchP.ToString("F3", inv)}");
                 sb.AppendLine($"param set MC_YAW_P {McYawP.ToString("F3", inv)}");
                 sb.AppendLine($"param set MC_ROLLRATE_P {McRollPitchRateP.ToString("F3", inv)}");
+                sb.AppendLine($"param set MC_ROLLRATE_I {McRollPitchRateI.ToString("F3", inv)}");
+                sb.AppendLine($"param set MC_ROLLRATE_D {McRollPitchRateD.ToString("F3", inv)}");
                 sb.AppendLine($"param set MC_PITCHRATE_P {McRollPitchRateP.ToString("F3", inv)}");
+                sb.AppendLine($"param set MC_PITCHRATE_I {McRollPitchRateI.ToString("F3", inv)}");
+                sb.AppendLine($"param set MC_PITCHRATE_D {McRollPitchRateD.ToString("F3", inv)}");
                 sb.AppendLine($"param set MC_YAWRATE_P {McYawRateP.ToString("F3", inv)}");
             }
 
