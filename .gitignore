@@ -43,6 +43,8 @@ Obfuscated/
 /PX4-Autopilot/
 /.px4-venv/
 /docker/config/*.params
+/Assets/FlightLogs/
+/Assets/FlightLogs.meta
 
 # --- 5. OS & IDE Files ---
 .DS_Store

@@ -1,400 +1,387 @@
 // Licensed under the Apache License, Version 2.0.
 #nullable enable
 using System;
-using System.IO;
-using UnityEditor;
-using UnityEngine;
 using FlightDynamics6DoF.Core.Aerodynamics;
-using FlightDynamics6DoF.Core.Gnc;
-using FlightDynamics6DoF.Core.Math;
-using FlightDynamics6DoF.Core.Mavlink;
 using FlightDynamics6DoF.Core.Specs;
 using FlightDynamics6DoF.Unity;
+using UnityEditor;
+using UnityEngine;
 
 namespace FlightDynamics6DoF.Editor
 {
     /// <summary>
-    /// All-in-one Unity Editor Engineering Workbench, Aerodynamic Calculator (Modules 1-5),
-    /// Multi-Fidelity Stage 1/Stage 2 Configurator, PX4 Airframe Exporter, and Scene Setup Wizard.
+    /// Unified 5-Step Custom Editor Workbench coordinator.
+    /// Each step UI is encapsulated in its own panel class and infrastructure
+    /// process/status state lives in SitlInfraController.
     /// </summary>
     public class FlightDynamicsEngineeringWizard : EditorWindow
     {
         private int _selectedTab = 0;
         private Vector2 _scrollPos;
 
-        private AircraftProfileAsset? _targetProfile;
-        private FlightDynamicsVehicle? _sceneVehicle;
+        internal AircraftProfileAsset? TargetProfile;
+        internal FlightDynamicsVehicle? SceneVehicle;
+        internal readonly SitlInfraController Infra = new SitlInfraController();
+        internal string AirframeModel = "iris";
+        internal VehicleAirframeCategory PresetCategory = VehicleAirframeCategory.Multirotor;
 
-        // Interactive Module 1 Calculator inputs
-        private string _nacaCode = "2412";
-        private float _testAlphaDeg = 5.0f;
-        private float _testReynolds = 500000f;
-        private float _testMach = 0.08f;
-        private AirfoilPolarPoint _lastAirfoilPoint;
-        private bool _hasAirfoilResult;
+        private AircraftConfigSpec? _cachedConfig;
+        private BakedAeroDatabase? _cachedDb;
 
-        // Interactive Module 4 CCBlade BEMT Calculator inputs
-        private float _testRotorRpm = 6500f;
-        private float _testRotorAxialSpeedMps = 0.0f;
-        private float _testRotorAglMeters = 10.0f;
-        private RotorBemtSolution _lastRotorSolution;
-        private bool _hasRotorResult;
+        private readonly AeroDesignPanel _aeroPanel = new AeroDesignPanel();
+        private readonly InfraControlPanel _infraPanel = new InfraControlPanel();
+        private readonly SimulationEnvironmentPanel _simPanel = new SimulationEnvironmentPanel();
+        private readonly Px4TuningPanel _tuningPanel = new Px4TuningPanel();
+        private readonly TelemetryLogPanel _telemetryPanel = new TelemetryLogPanel();
 
-        // Scene setup options
-        private VehicleAirframeCategory _wizardPresetCategory = VehicleAirframeCategory.Multirotor;
-        private SimulationFidelityLevel _wizardFidelity = SimulationFidelityLevel.Level2_6DoFBladeAndStrip;
-        private MavlinkBridgeMode _wizardMavlinkMode = MavlinkBridgeMode.ExternalSitlHil;
-        private bool _wizardAutoTakeoff = false;
-
-        private static readonly string[] TabTitles = new[]
+        private static readonly string[] StepTitles = new[]
         {
-            "1. Stage-1 Aero & Stability Analyzer",
-            "2. Stage-2 Multi-Fidelity 6-DOF",
-            "3. GNC, MAVLink & PX4 Exporter",
-            "4. One-Click Scene Setup Wizard"
+            "1. 공력/설계",
+            "2. 인프라",
+            "3. 시뮬레이션 환경",
+            "4. PX4 튜닝",
+            "5. 계측/로그"
         };
 
-        [MenuItem("Tools/FlightDynamics 6-DOF/Engineering Workbench & Setup Wizard", false, 10)]
-        public static void ShowWindow()
+        [MenuItem("Tools/FlightDynamics 6-DOF/Unified 5-Step Engineering Workbench", false, 10)]
+        [MenuItem("Window/Aerospace/Unified 5-Step Engineering Workbench", false, 10)]
+        public static void ShowWindow() => OpenStep(0);
+
+        public static void OpenStep(int stepIndex)
         {
             var win = GetWindow<FlightDynamicsEngineeringWizard>("FlightDynamics 6-DOF Workbench");
-            win.minSize = new Vector2(680, 620);
+            win.minSize = new Vector2(840, 700);
+            win._selectedTab = Mathf.Clamp(stepIndex, 0, StepTitles.Length - 1);
             win.Show();
+        }
+
+        internal void SelectTab(int tabIndex) => _selectedTab = Mathf.Clamp(tabIndex, 0, StepTitles.Length - 1);
+
+        internal void SyncEditingParamTableFromVehicle()
+        {
+            if (SceneVehicle != null)
+                _tuningPanel.EditingParamTable = SceneVehicle.ControlParameterTable;
         }
 
         private void OnEnable()
         {
-            if (_sceneVehicle == null)
-                _sceneVehicle = FindFirstObjectByType<FlightDynamicsVehicle>();
+            RefreshSceneRefs();
+            EditorApplication.update += HandleEditorUpdate;
+            EditorApplication.playModeStateChanged += HandlePlayModeStateChanged;
+            Infra.TriggerStatusQuery(EditorApplication.timeSinceStartup);
+        }
+
+        private void OnDisable()
+        {
+            EditorApplication.update -= HandleEditorUpdate;
+            EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
+        }
+
+        private void HandlePlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.EnteredEditMode)
+            {
+                _telemetryPanel.RefreshSavedFlightLogList(autoLoadLatestIfEmpty: false);
+                Repaint();
+            }
+            else if (state == PlayModeStateChange.ExitingPlayMode && SceneVehicle != null && SceneVehicle.TelemetryLogger.Frames.Count > 1)
+            {
+                SceneVehicle.AutoSaveTelemetryLogs();
+                _telemetryPanel.RefreshSavedFlightLogList(autoLoadLatestIfEmpty: false);
+            }
+        }
+
+        private void RefreshSceneRefs()
+        {
+            if (SceneVehicle == null)
+                SceneVehicle = FindFirstObjectByType<FlightDynamicsVehicle>();
+
+            if (SceneVehicle != null)
+            {
+                if (TargetProfile == null && SceneVehicle.ProfileAsset != null)
+                    TargetProfile = SceneVehicle.ProfileAsset;
+
+                PresetCategory = SceneVehicle.ActiveConfig.Category;
+                AirframeModel = _tuningPanel.SyncTableForCategory(
+                    PresetCategory,
+                    SceneVehicle.ActiveConfig,
+                    SceneVehicle.ActiveBakedDatabase,
+                    SceneVehicle.ControlParameterTable);
+            }
+            else if (TargetProfile != null)
+            {
+                PresetCategory = TargetProfile.Config.Category;
+                AirframeModel = _tuningPanel.SyncTableForCategory(
+                    PresetCategory,
+                    TargetProfile.Config,
+                    TargetProfile.BakedDatabase);
+            }
+            else
+            {
+                AirframeModel = _tuningPanel.SyncTableForCategory(
+                    PresetCategory,
+                    GetCurrentConfig(),
+                    GetCurrentBakedDb());
+            }
+        }
+
+        private void HandleEditorUpdate()
+        {
+            bool shouldRepaint = Infra.Tick(EditorApplication.timeSinceStartup);
+
+            if (_selectedTab == 4 && EditorApplication.isPlaying &&
+                _telemetryPanel.ShouldRepaintOnPlay(EditorApplication.timeSinceStartup))
+            {
+                shouldRepaint = true;
+            }
+
+            if (shouldRepaint)
+                Repaint();
         }
 
         private void OnGUI()
         {
-            DrawBannerHeader();
+            RefreshSceneRefs();
+            DrawPersistentHeader();
 
-            _selectedTab = GUILayout.Toolbar(_selectedTab, TabTitles, GUILayout.Height(28));
+            _selectedTab = GUILayout.Toolbar(_selectedTab, StepTitles, GUILayout.Height(30));
             EditorGUILayout.Space(6);
 
             _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
             switch (_selectedTab)
             {
-                case 0:
-                    DrawTabStage1AeroAndStabilityAnalyzer();
-                    break;
-                case 1:
-                    DrawTabStage2MultiFidelityConfig();
-                    break;
-                case 2:
-                    DrawTabGncMavlinkAndPx4Export();
-                    break;
-                case 3:
-                    DrawTabOneClickSceneSetup();
-                    break;
+                case 0: _aeroPanel.Draw(this); break;
+                case 1: _infraPanel.Draw(Infra, AirframeModel, () => _tuningPanel.ExportParamsToDockerConfig(this)); break;
+                case 2: _simPanel.Draw(this); break;
+                case 3: _tuningPanel.Draw(this); break;
+                case 4: _telemetryPanel.Draw(this); break;
             }
             EditorGUILayout.EndScrollView();
+
+            DrawStepFooterNav();
         }
 
-        private void DrawBannerHeader()
+        private void DrawPersistentHeader()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("FlightDynamics 6-DOF: Nonlinear UAV/VTOL FDM & Aerodynamic Engineering Suite", EditorStyles.boldLabel);
-            GUILayout.Label("Apache-2.0 Compliant | Stage-1 Pre-Flight Aero/Stability Analyzer (CST/NeuralFoil + Viterna + 3D VLM + CCBlade BEMT) & Stage-2 Multi-Fidelity (Level 0..3) 6-DOF Simulator", EditorStyles.miniLabel);
-            EditorGUILayout.EndVertical();
-
             EditorGUILayout.BeginHorizontal();
-            _targetProfile = (AircraftProfileAsset?)EditorGUILayout.ObjectField("Aircraft Profile Asset", _targetProfile, typeof(AircraftProfileAsset), false);
-            if (GUILayout.Button("Create New Asset", GUILayout.Width(130)))
+            GUILayout.Label("FlightDynamics 6-DOF: Unified 5-Step SITL Workbench", EditorStyles.boldLabel);
+            GUILayout.FlexibleSpace();
+
+            if (!EditorApplication.isPlaying)
             {
-                CreateNewProfileAsset();
-            }
-            EditorGUILayout.EndHorizontal();
-
-            _sceneVehicle = (FlightDynamicsVehicle?)EditorGUILayout.ObjectField("Active Scene Vehicle", _sceneVehicle, typeof(FlightDynamicsVehicle), true);
-            EditorGUILayout.Space(4);
-        }
-
-        private AircraftConfigSpec GetCurrentConfig()
-        {
-            if (_targetProfile != null) return _targetProfile.Config;
-            if (_sceneVehicle != null) return _sceneVehicle.ActiveConfig;
-            return AircraftConfigSpec.CreateStandardQuadcopterX();
-        }
-
-        private BakedAeroDatabase GetCurrentBakedDb()
-        {
-            if (_targetProfile != null) return _targetProfile.BakedDatabase;
-            if (_sceneVehicle != null) return _sceneVehicle.ActiveBakedDatabase;
-            return StabilityAndTrimAnalyzer.AnalyzeAndBake(GetCurrentConfig());
-        }
-
-        private void DrawTabStage1AeroAndStabilityAnalyzer()
-        {
-            var cfg = GetCurrentConfig();
-            var db = GetCurrentBakedDb();
-
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("A. Load Engineering Reference Airframe or Extract 3D Mesh Geometry", EditorStyles.boldLabel);
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Load Quadcopter X-450")) ApplyPreset(VehicleAirframeCategory.Multirotor);
-            if (GUILayout.Button("Load Fixed-Wing Talon-180")) ApplyPreset(VehicleAirframeCategory.FixedWing);
-            if (GUILayout.Button("Load QuadPlane VTOL (Millie-Class)")) ApplyPreset(VehicleAirframeCategory.HybridQuadPlaneVtol);
-            EditorGUILayout.EndHorizontal();
-
-            if (_sceneVehicle != null && GUILayout.Button("Extract Mass/Inertia & Projected Areas from Scene Vehicle 3D Meshes"))
-            {
-                Undo.RecordObject(_sceneVehicle, "Extract 3D Mesh Geometry");
-                _sceneVehicle.ExtractGeometryFromChildMeshesAndBake();
-                EditorUtility.SetDirty(_sceneVehicle);
-            }
-            EditorGUILayout.EndVertical();
-
-            EditorGUILayout.Space(6);
-
-            // Module 1 Calculator
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("B. Module 1: 2D Airfoil Viscous Polar & Viterna (+/-180 deg) Calculator", EditorStyles.boldLabel);
-            _nacaCode = EditorGUILayout.TextField("NACA 4-Digit Code", _nacaCode);
-            _testAlphaDeg = EditorGUILayout.Slider("Angle of Attack Alpha [deg]", _testAlphaDeg, -180f, 180f);
-            _testReynolds = EditorGUILayout.Slider("Reynolds Number (Re)", _testReynolds, 1.0e4f, 1.0e7f);
-            _testMach = EditorGUILayout.Slider("Mach Number (M < 0.7)", _testMach, 0.0f, 0.68f);
-
-            if (GUILayout.Button("Evaluate 2D Airfoil Section (CST + NeuralFoil + Viterna)"))
-            {
-                var af = AirfoilSpec.FromNaca4Digit(_nacaCode, _testReynolds);
-                _lastAirfoilPoint = AirfoilPolarSolver.Evaluate(af, _testAlphaDeg * FrameConverter.Deg2Rad, _testReynolds, _testMach);
-                _hasAirfoilResult = true;
-            }
-
-            if (_hasAirfoilResult)
-            {
-                EditorGUILayout.HelpBox(
-                    $"Alpha = {_lastAirfoilPoint.AlphaDeg:F1} deg | Cl = {_lastAirfoilPoint.Cl:F4} | Cd = {_lastAirfoilPoint.Cd:F4} | Cm = {_lastAirfoilPoint.Cm:F4} | L/D = {(_lastAirfoilPoint.Cl / System.Math.Max(1e-4, _lastAirfoilPoint.Cd)):F1}\n" +
-                    $"Boundary-Layer Transition: Top Xtr/c = {_lastAirfoilPoint.TopTransitionXtr:F3} | Bottom Xtr/c = {_lastAirfoilPoint.BotTransitionXtr:F3}",
-                    MessageType.Info);
-            }
-            EditorGUILayout.EndVertical();
-
-            EditorGUILayout.Space(6);
-
-            // Module 4 Calculator
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("C. Module 4: CCBlade BEMT Rotor & Slipstream Performance Calculator", EditorStyles.boldLabel);
-            _testRotorRpm = EditorGUILayout.Slider("Rotor Speed [RPM]", _testRotorRpm, 500f, 12000f);
-            _testRotorAxialSpeedMps = EditorGUILayout.Slider("Axial Inflow Speed V_inf [m/s]", _testRotorAxialSpeedMps, -5f, 35f);
-            _testRotorAglMeters = EditorGUILayout.Slider("Altitude AGL (Ground Effect) [m]", _testRotorAglMeters, 0.1f, 20f);
-
-            if (GUILayout.Button("Evaluate Rotor BEMT (Prandtl Tip/Hub Loss + Glauert/Buhl)"))
-            {
-                RotorSpec rSpec = cfg.Rotors.Count > 0 ? cfg.Rotors[0] : AircraftConfigSpec.CreateStandardQuadcopterX().Rotors[0];
-                var atm = IsaAtmosphereAndTurbulence.Evaluate(cfg.DesignAltitudeMsl);
-                Vec3d vInf = rSpec.ThrustAxisFrd.Normalized() * _testRotorAxialSpeedMps;
-                _lastRotorSolution = CcBladeBemtSolver.EvaluateRotor(rSpec, vInf, Vec3d.Zero, _testRotorRpm, atm, _testRotorAglMeters, true, true);
-                _hasRotorResult = true;
-            }
-
-            if (_hasRotorResult)
-            {
-                EditorGUILayout.HelpBox(
-                    $"Thrust = {_lastRotorSolution.ThrustNewtons:F2} N | Torque = {_lastRotorSolution.AerodynamicTorqueNm:F4} N*m | Shaft Power = {_lastRotorSolution.ShaftPowerWatts:F1} W\n" +
-                    $"J = {_lastRotorSolution.AdvanceRatioJ:F3} | CT = {_lastRotorSolution.Ct:F4} | CQ = {_lastRotorSolution.Cq:F5} | Efficiency Eta = {(_lastRotorSolution.EfficiencyEta * 100.0):F1}% | Mean Induced Vi = {_lastRotorSolution.MeanAxialInducedVelocityMps:F2} m/s",
-                    MessageType.Info);
-            }
-            EditorGUILayout.EndVertical();
-
-            EditorGUILayout.Space(6);
-
-            // Module 2, 3, 5 Full Aircraft Analysis & Bake
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("D. Modules 2, 3 & 5: Full-Aircraft 3D VLM, Slender Body, Stability Derivatives & Trim Bake", EditorStyles.boldLabel);
-            if (GUILayout.Button("Execute Stage 1 Full Aircraft Analysis & Bake Database", GUILayout.Height(32)))
-            {
-                RunBakeOnActiveTarget();
-                db = GetCurrentBakedDb();
-            }
-
-            if (db != null && !string.IsNullOrEmpty(db.AircraftName))
-            {
-                EditorGUILayout.LabelField("Analyzed Aircraft", $"{db.AircraftName} (Mass: {db.TotalMassKg:F2} kg, S_ref: {db.ReferenceAreaSqM:F3} m^2, MAC: {db.MeanAerodynamicChord:F3} m)");
-                EditorGUILayout.LabelField("Longitudinal Derivatives", $"CL0={db.CL0:F3}, CL_alpha={db.CLAlpha:F2}/rad, Cm0={db.Cm0:F3}, Cm_alpha={db.CmAlpha:F3}/rad, Cm_q={db.Cmq:F2}/rad");
-                EditorGUILayout.LabelField("Parasitic & Induced Drag", $"CD0={db.CD0:F4}, Induced Factor k={db.InducedDragFactorK:F4} (Oswald e={db.OswaldEfficiency:F2})");
-                EditorGUILayout.LabelField("Lateral-Directional", $"CY_beta={db.CYBeta:F3}, Cl_beta={db.ClBeta:F3}, Cn_beta={db.CnBeta:F3}, Cl_p={db.Clp:F2}, Cn_r={db.Cnr:F3}");
-                EditorGUILayout.LabelField("Control Power", $"Cl_da={db.ClDeltaA:F3}/rad, Cm_de={db.CmDeltaE:F3}/rad, Cn_dr={db.CnDeltaR:F3}/rad");
-                EditorGUILayout.LabelField("Neutral Point & Static Margin", $"x_NP = {db.NeutralPointXFrd:F3} m | Static Margin = {(db.StaticMarginFraction * 100.0):F1}% MAC");
-                EditorGUILayout.LabelField("Equilibrium Trim State", $"V_trim={db.TrimAirspeedMps:F1} m/s, Alpha_trim={db.TrimAlphaDeg:F2} deg, Elev_trim={db.TrimElevatorDeg:F2} deg, Throttle={db.TrimThrottleNormalized * 100.0:F1}%");
-            }
-            EditorGUILayout.EndVertical();
-        }
-
-        private void DrawTabStage2MultiFidelityConfig()
-        {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("Stage 2: Real-Time Simulation Fidelity Level Selector", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox(
-                "Level 0 (Unity Rigidbody): Uses Unity PhysX FixedUpdate with Stage-1 lumped rotor Kt/Kq and bluff drag.\n" +
-                "Level 1 (6-DOF Surrogate): Custom RK4 6-DOF solver driven by Stage-1 pre-baked derivatives & BEMT lookup curves.\n" +
-                "Level 2 (6-DOF BEMT + Strip): Custom RK4 6-DOF solver with real-time per-rotor CCBlade BEMT & nonlinear wing strips (+/-180 deg Viterna).\n" +
-                "Level 3 (Full 6-DOF + 3D VLM + Slipstream): Adds real-time 3D VLM horseshoe vortex downwash and contracting rotor slipstream tube wake coupling.",
-                MessageType.None);
-
-            if (_sceneVehicle != null)
-            {
-                Undo.RecordObject(_sceneVehicle, "Modify Stage 2 Fidelity Settings");
-                _sceneVehicle.FidelityLevel = (SimulationFidelityLevel)EditorGUILayout.EnumPopup("Active Fidelity Level", _sceneVehicle.FidelityLevel);
-                _sceneVehicle.Rk4SubStepFrequencyHz = EditorGUILayout.IntSlider("RK4 Integration Rate [Hz]", _sceneVehicle.Rk4SubStepFrequencyHz, 100, 1000);
-                _sceneVehicle.ActiveConfig.EnableGroundEffect = EditorGUILayout.Toggle("Cheeseman-Bennett Ground Effect", _sceneVehicle.ActiveConfig.EnableGroundEffect);
-                _sceneVehicle.ActiveConfig.EnableBladeFlappingAndRotorDrag = EditorGUILayout.Toggle("Edgewise Blade Flapping & H-Drag", _sceneVehicle.ActiveConfig.EnableBladeFlappingAndRotorDrag);
-                _sceneVehicle.ActiveConfig.EnableDrydenTurbulence = EditorGUILayout.Toggle("Dryden Wind Turbulence", _sceneVehicle.ActiveConfig.EnableDrydenTurbulence);
-                _sceneVehicle.ActiveConfig.TurbulenceIntensityMps = EditorGUILayout.Slider("Turbulence Intensity [m/s]", (float)_sceneVehicle.ActiveConfig.TurbulenceIntensityMps, 0f, 8f);
-                EditorUtility.SetDirty(_sceneVehicle);
+                GUI.backgroundColor = new Color(0.45f, 0.95f, 0.55f);
+                if (GUILayout.Button("▶ 시뮬레이션 시작", GUILayout.Width(135), GUILayout.Height(22)))
+                    StartSimulation();
             }
             else
             {
-                _wizardFidelity = (SimulationFidelityLevel)EditorGUILayout.EnumPopup("Default Fidelity Level", _wizardFidelity);
-            }
-            EditorGUILayout.EndVertical();
-        }
-
-        private void DrawTabGncMavlinkAndPx4Export()
-        {
-            var cfg = GetCurrentConfig();
-            var db = GetCurrentBakedDb();
-
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("A. PX4 v1.14+ Control Allocation & Airframe Parameter Exporter", EditorStyles.boldLabel);
-            GUILayout.Label("Replaces external Python scripts (e.g., px4_airframe.py) with native C# pseudoinverse mixer & CA_ROTOR/CA_SV_CS generation.");
-
-            if (GUILayout.Button("Export PX4 Control Allocation Script (.params / .sh)", GUILayout.Height(28)))
-            {
-                string script = WrenchControlAllocator.GeneratePx4AirframeParameterScript(cfg, db);
-                string path = EditorUtility.SaveFilePanel("Save PX4 Airframe Parameter Script", Application.dataPath, $"{cfg.AircraftName.Replace(' ', '_')}_px4.params", "params");
-                if (!string.IsNullOrEmpty(path))
-                {
-                    File.WriteAllText(path, script);
-                    Debug.Log($"[FlightDynamics6DoF] Exported PX4 Airframe script to: {path}");
-                }
-            }
-
-            GUI.backgroundColor = new Color(0.6f, 0.9f, 1f);
-            if (GUILayout.Button("Open Non-Docker Container & VM Manager Window", GUILayout.Height(28)))
-            {
-                Px4ContainerManagerWindow.ShowWindow();
+                GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
+                if (GUILayout.Button("■ 시뮬레이션 종료", GUILayout.Width(135), GUILayout.Height(22)))
+                    StopSimulation();
             }
             GUI.backgroundColor = Color.white;
 
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Export Aircraft Spec to JSON"))
-            {
-                string json = JsonUtility.ToJson(cfg, true);
-                string path = EditorUtility.SaveFilePanel("Save Aircraft JSON Spec", Application.dataPath, $"{cfg.AircraftName.Replace(' ', '_')}.json", "json");
-                if (!string.IsNullOrEmpty(path))
-                    File.WriteAllText(path, json);
-            }
-            if (GUILayout.Button("Import Aircraft Spec from JSON"))
-            {
-                string path = EditorUtility.OpenFilePanel("Import Aircraft JSON Spec", Application.dataPath, "json");
-                if (!string.IsNullOrEmpty(path) && File.Exists(path))
-                {
-                    string json = File.ReadAllText(path);
-                    var imported = JsonUtility.FromJson<AircraftConfigSpec>(json);
-                    if (imported != null)
-                    {
-                        if (_targetProfile != null) { _targetProfile.Config = imported; _targetProfile.AnalyzeAndBake(); }
-                        else if (_sceneVehicle != null) { _sceneVehicle.InlineConfig = imported; _sceneVehicle.RunStage1AnalysisAndBake(); }
-                    }
-                }
-            }
+            Infra.AutoRefreshStatus = EditorGUILayout.ToggleLeft("자동상태갱신", Infra.AutoRefreshStatus, GUILayout.Width(88));
+            GUI.enabled = !Infra.IsQueryingStatus;
+            if (GUILayout.Button(Infra.IsQueryingStatus ? "확인중..." : "갱신하기", GUILayout.Width(68), GUILayout.Height(22)))
+                Infra.TriggerStatusQuery(EditorApplication.timeSinceStartup);
+            GUI.enabled = true;
             EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+            bool vmUp = Infra.VmStatus.Equals("RUNNING", StringComparison.OrdinalIgnoreCase);
+            bool cdUp = Infra.ContainerdStatus.Equals("ACTIVE", StringComparison.OrdinalIgnoreCase);
+            bool px4Up = Infra.IsContainerRunning("unity-px4-sitl");
+            bool rosUp = Infra.IsContainerRunning("unity-ros2-dds");
+
+            DrawCompactBadge($"VM ({Infra.DetectedBackendName})", vmUp ? "RUNNING" : Infra.VmStatus, vmUp ? new Color(0.25f, 0.85f, 0.35f) : new Color(0.9f, 0.35f, 0.35f));
+            DrawCompactBadge("containerd", cdUp ? "ACTIVE" : Infra.ContainerdStatus, cdUp ? new Color(0.25f, 0.85f, 0.35f) : new Color(0.95f, 0.65f, 0.25f));
+            DrawCompactBadge("unity-px4-sitl", px4Up ? $"UP ({AirframeModel})" : "STOPPED", px4Up ? new Color(0.25f, 0.85f, 0.35f) : new Color(0.85f, 0.4f, 0.4f));
+            DrawCompactBadge("unity-ros2-dds", rosUp ? "UP (UDP:8888)" : "STOPPED", rosUp ? new Color(0.25f, 0.85f, 0.35f) : new Color(0.85f, 0.4f, 0.4f));
+
+            var activeLogger = _telemetryPanel.GetActiveLogger(SceneVehicle);
+            string simState = EditorApplication.isPlaying ? $"PLAY ({activeLogger.Frames.Count}f)" : $"IDLE ({activeLogger.Frames.Count}f)";
+            DrawCompactBadge("시뮬레이션", simState, EditorApplication.isPlaying ? new Color(0.3f, 0.85f, 1f) : Color.gray);
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+            TargetProfile = (AircraftProfileAsset?)EditorGUILayout.ObjectField("Profile Asset", TargetProfile, typeof(AircraftProfileAsset), false);
+            if (GUILayout.Button("New Asset", GUILayout.Width(80)))
+                AeroDesignPanel.CreateNewProfileAsset(this);
+            SceneVehicle = (FlightDynamicsVehicle?)EditorGUILayout.ObjectField("Scene Vehicle", SceneVehicle, typeof(FlightDynamicsVehicle), true);
+            EditorGUILayout.EndHorizontal();
+
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawTabOneClickSceneSetup()
+        private static void DrawCompactBadge(string label, string state, Color col)
         {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("One-Click Engineering Simulation Scene Builder", EditorStyles.boldLabel);
-            _wizardPresetCategory = (VehicleAirframeCategory)EditorGUILayout.EnumPopup("Vehicle Airframe Preset", _wizardPresetCategory);
-            _wizardFidelity = (SimulationFidelityLevel)EditorGUILayout.EnumPopup("Stage-2 Fidelity Level", _wizardFidelity);
-            _wizardMavlinkMode = (MavlinkBridgeMode)EditorGUILayout.EnumPopup("MAVLink Operating Mode", _wizardMavlinkMode);
-            _wizardAutoTakeoff = EditorGUILayout.Toggle("Auto-Arm & Takeoff on Play", _wizardAutoTakeoff);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.MinWidth(105));
+            GUILayout.Label(label, EditorStyles.miniLabel);
+            var prev = GUI.contentColor;
+            GUI.contentColor = col;
+            GUILayout.Label(state, EditorStyles.miniBoldLabel);
+            GUI.contentColor = prev;
+            EditorGUILayout.EndVertical();
+        }
 
-            EditorGUILayout.Space(8);
-            if (GUILayout.Button("Build Complete 6-DOF Flight Simulation Environment in Current Scene", GUILayout.Height(36)))
-            {
+        private void DrawStepFooterNav()
+        {
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            GUI.enabled = _selectedTab > 0;
+            if (GUILayout.Button("<< 이전 단계", GUILayout.Width(130), GUILayout.Height(24)))
+                _selectedTab--;
+            GUI.enabled = true;
+
+            GUILayout.FlexibleSpace();
+            GUILayout.Label($"현재 단계: {StepTitles[_selectedTab]}", EditorStyles.miniBoldLabel);
+            GUILayout.FlexibleSpace();
+
+            GUI.enabled = _selectedTab < StepTitles.Length - 1;
+            if (GUILayout.Button("다음 단계 >>", GUILayout.Width(130), GUILayout.Height(24)))
+                _selectedTab++;
+            GUI.enabled = true;
+            EditorGUILayout.EndHorizontal();
+        }
+
+        internal void StartSimulation()
+        {
+            if (SceneVehicle == null)
                 BuildCompleteSimulationScene();
+
+            if (SceneVehicle != null)
+            {
+                SceneVehicle.TelemetryLogger.Clear();
+                SceneVehicle.TelemetryLogger.StartRecording();
             }
-            EditorGUILayout.EndVertical();
+
+            EditorApplication.isPlaying = true;
         }
 
-        private void ApplyPreset(VehicleAirframeCategory category)
+        internal void StopSimulation()
         {
-            if (_targetProfile != null)
+            if (SceneVehicle != null && SceneVehicle.TelemetryLogger.Frames.Count > 1)
+                SceneVehicle.AutoSaveTelemetryLogs();
+
+            EditorApplication.isPlaying = false;
+
+            if (_simPanel.StopContainersOnSimExit)
+                Infra.RunScriptAction("down", "Stopping PX4 & ROS 2 containers on simulation exit...", () => EditorApplication.timeSinceStartup);
+        }
+
+        internal AircraftConfigSpec GetCurrentConfig()
+        {
+            if (SceneVehicle != null) return SceneVehicle.ActiveConfig;
+            if (TargetProfile != null) return TargetProfile.Config;
+            if (_cachedConfig == null)
             {
-                Undo.RecordObject(_targetProfile, "Load Aircraft Preset");
-                _targetProfile.LoadPreset(category);
-                EditorUtility.SetDirty(_targetProfile);
-            }
-            else if (_sceneVehicle != null)
-            {
-                Undo.RecordObject(_sceneVehicle, "Load Aircraft Preset");
-                _sceneVehicle.InlineConfig = category switch
+                _cachedConfig = PresetCategory switch
                 {
                     VehicleAirframeCategory.FixedWing => AircraftConfigSpec.CreateFixedWingUav(),
                     VehicleAirframeCategory.HybridQuadPlaneVtol => AircraftConfigSpec.CreateQuadPlaneVtolMillie(),
                     _ => AircraftConfigSpec.CreateStandardQuadcopterX()
                 };
-                _sceneVehicle.RunStage1AnalysisAndBake();
-                EditorUtility.SetDirty(_sceneVehicle);
             }
+            return _cachedConfig;
         }
 
-        private void RunBakeOnActiveTarget()
+        internal BakedAeroDatabase GetCurrentBakedDb()
         {
-            if (_targetProfile != null)
-            {
-                Undo.RecordObject(_targetProfile, "Bake Aero DB");
-                _targetProfile.AnalyzeAndBake();
-                EditorUtility.SetDirty(_targetProfile);
-            }
-            if (_sceneVehicle != null)
-            {
-                Undo.RecordObject(_sceneVehicle, "Bake Scene Vehicle Aero DB");
-                _sceneVehicle.RunStage1AnalysisAndBake();
-                EditorUtility.SetDirty(_sceneVehicle);
-            }
+            if (SceneVehicle != null) return SceneVehicle.ActiveBakedDatabase;
+            if (TargetProfile != null) return TargetProfile.BakedDatabase;
+            if (_cachedDb == null)
+                _cachedDb = StabilityAndTrimAnalyzer.AnalyzeAndBake(GetCurrentConfig());
+            return _cachedDb;
         }
 
-        private void CreateNewProfileAsset()
+        internal string RebakeActiveConfig(AircraftConfigSpec cfg)
         {
-            string path = EditorUtility.SaveFilePanelInProject(
-                "Create Aircraft Profile Asset",
-                "EngineeringAircraftProfile",
-                "asset",
-                "Choose location for the AircraftProfileAsset");
-
-            if (string.IsNullOrEmpty(path)) return;
-
-            var asset = CreateInstance<AircraftProfileAsset>();
-            asset.LoadPreset(_wizardPresetCategory);
-            AssetDatabase.CreateAsset(asset, path);
-            AssetDatabase.SaveAssets();
-            _targetProfile = asset;
-            Selection.activeObject = asset;
+            string targetDesc = "오프라인 프리셋 캐시";
+            if (TargetProfile != null)
+            {
+                Undo.RecordObject(TargetProfile, "Modify Aircraft Spec");
+                TargetProfile.Config = cfg;
+                TargetProfile.AnalyzeAndBake();
+                EditorUtility.SetDirty(TargetProfile);
+                targetDesc = $"ProfileAsset ({TargetProfile.name})";
+            }
+            if (SceneVehicle != null)
+            {
+                Undo.RecordObject(SceneVehicle, "Modify Scene Vehicle Spec");
+                SceneVehicle.InlineConfig = cfg;
+                SceneVehicle.RunStage1AnalysisAndBake();
+                EditorUtility.SetDirty(SceneVehicle);
+                targetDesc = TargetProfile != null ? $"{targetDesc} + SceneVehicle" : $"SceneVehicle ({SceneVehicle.name})";
+            }
+            if (TargetProfile == null && SceneVehicle == null)
+            {
+                _cachedConfig = cfg;
+                _cachedDb = StabilityAndTrimAnalyzer.AnalyzeAndBake(cfg);
+            }
+            return targetDesc;
         }
 
-        private void BuildCompleteSimulationScene()
+        internal void SwitchAirframeEverywhere(VehicleAirframeCategory category, string modelName)
         {
-            var mgr = FlightSimulationManager.SpawnCompleteSimulationEnvironment(
-                _wizardPresetCategory,
-                _wizardFidelity,
-                _wizardMavlinkMode,
-                _wizardAutoTakeoff);
+            PresetCategory = category;
+            AirframeModel = modelName;
 
-            _sceneVehicle = mgr.PrimaryVehicle;
-            if (_sceneVehicle != null)
+            if (TargetProfile != null)
             {
-                Selection.activeGameObject = _sceneVehicle.gameObject;
+                Undo.RecordObject(TargetProfile, "Switch Airframe Profile");
+                TargetProfile.LoadPreset(category);
+                TargetProfile.AnalyzeAndBake();
+                EditorUtility.SetDirty(TargetProfile);
+            }
+
+            var simMgr = FindFirstObjectByType<FlightSimulationManager>();
+            if (simMgr != null)
+            {
+                simMgr.SwitchVehicleAndPx4Model(category);
+                SceneVehicle = simMgr.PrimaryVehicle;
+            }
+            else if (SceneVehicle != null)
+            {
+                Undo.RecordObject(SceneVehicle, "Switch Scene Vehicle Airframe");
+                SceneVehicle.InlineConfig = category switch
+                {
+                    VehicleAirframeCategory.FixedWing => AircraftConfigSpec.CreateFixedWingUav(),
+                    VehicleAirframeCategory.HybridQuadPlaneVtol => AircraftConfigSpec.CreateQuadPlaneVtolMillie(),
+                    _ => AircraftConfigSpec.CreateStandardQuadcopterX()
+                };
+                SceneVehicle.RunStage1AnalysisAndBake();
+                EditorUtility.SetDirty(SceneVehicle);
+            }
+            else
+            {
+                _cachedConfig = category switch
+                {
+                    VehicleAirframeCategory.FixedWing => AircraftConfigSpec.CreateFixedWingUav(),
+                    VehicleAirframeCategory.HybridQuadPlaneVtol => AircraftConfigSpec.CreateQuadPlaneVtolMillie(),
+                    _ => AircraftConfigSpec.CreateStandardQuadcopterX()
+                };
+                _cachedDb = StabilityAndTrimAnalyzer.AnalyzeAndBake(_cachedConfig);
+            }
+
+            var cfg = GetCurrentConfig();
+            var db = GetCurrentBakedDb();
+            _tuningPanel.ResetTableForCategory(category, cfg, db, SceneVehicle);
+            AirframeModel = _tuningPanel.EditingParamTable?.Px4SitlModelName ?? modelName;
+            _tuningPanel.ExportParamsToDockerConfig(this);
+        }
+
+        internal void BuildCompleteSimulationScene()
+        {
+            var mgr = FlightSimulationManager.SpawnCompleteSimulationEnvironment(PresetCategory, _simPanel.Fidelity, _simPanel.MavlinkMode, _simPanel.AutoTakeoff);
+            SceneVehicle = mgr.PrimaryVehicle;
+            if (SceneVehicle != null)
+            {
+                _tuningPanel.EditingParamTable = SceneVehicle.ControlParameterTable;
+                AirframeModel = SceneVehicle.ControlParameterTable.Px4SitlModelName;
+                Selection.activeGameObject = SceneVehicle.gameObject;
                 if (SceneView.lastActiveSceneView != null)
                     SceneView.lastActiveSceneView.FrameSelected();
-                Debug.Log($"[FlightDynamics6DoF] Successfully created 3D simulation environment for {_sceneVehicle.ActiveConfig.AircraftName} ({_wizardFidelity}).");
             }
         }
     }

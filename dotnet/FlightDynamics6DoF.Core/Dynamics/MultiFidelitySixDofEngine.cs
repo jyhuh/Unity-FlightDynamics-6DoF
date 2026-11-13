@@ -694,10 +694,23 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 var w = _config.Wings[i];
                 int ch = w.ActuatorChannelIndex;
                 if (ch < 0 || ch >= State.ActuatorControlsNormalized.Length) continue;
-                double rad = State.ActuatorControlsNormalized[ch] * w.MaxDeflectionDeg * FrameConverter.Deg2Rad;
-                if (w.ControlType == ControlSurfaceType.Aileron) da = rad;
-                else if (w.ControlType == ControlSurfaceType.Elevator) de = rad;
-                else if (w.ControlType == ControlSurfaceType.Rudder) dr = rad;
+                double chVal = State.ActuatorControlsNormalized[ch];
+                if (w.ControlType == ControlSurfaceType.Aileron)
+                {
+                    if (ch + 1 < State.ActuatorControlsNormalized.Length && System.Math.Abs(State.ActuatorControlsNormalized[ch + 1]) > 1e-4)
+                    {
+                        chVal = 0.5 * (State.ActuatorControlsNormalized[ch + 1] - State.ActuatorControlsNormalized[ch]);
+                    }
+                    da = chVal * w.MaxDeflectionDeg * FrameConverter.Deg2Rad;
+                }
+                else if (w.ControlType == ControlSurfaceType.Elevator)
+                {
+                    de = chVal * w.MaxDeflectionDeg * FrameConverter.Deg2Rad;
+                }
+                else if (w.ControlType == ControlSurfaceType.Rudder)
+                {
+                    dr = chVal * w.MaxDeflectionDeg * FrameConverter.Deg2Rad;
+                }
             }
 
             double cl = _bakedDb.CL0 + _bakedDb.CLAlpha * alpha + _bakedDb.CLq * qHat + _bakedDb.CLDeltaE * de;

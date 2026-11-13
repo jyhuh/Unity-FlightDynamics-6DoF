@@ -15,6 +15,12 @@
             Executes one control step and writes the 16 normalized actuator commands into <paramref name="outControls16"/>.
             </summary>
         </member>
+        <member name="T:FlightDynamics6DoF.Core.Gnc.AirframeControlParameterTable">
+            <summary>
+            Airframe-specific PX4 SITL &amp; GNC control parameter table supporting Multirotor, Fixed-Wing, and QuadPlane VTOL.
+            Synchronizes parameter values across C# closed-loop autopilot, MAVLink PARAM_VALUE/SET, and PX4 startup scripts.
+            </summary>
+        </member>
         <member name="T:FlightDynamics6DoF.Core.Gnc.WrenchControlAllocator">
             <summary>
             Universal Pseudoinverse Wrench Control Allocator (Actuator Mixer) and PX4 v1.14+ Control Allocation Parameter Exporter.
@@ -31,7 +37,7 @@
         <member name="M:FlightDynamics6DoF.Core.Gnc.WrenchControlAllocator.GeneratePx4AirframeParameterScript(FlightDynamics6DoF.Core.Specs.AircraftConfigSpec,FlightDynamics6DoF.Core.Specs.BakedAeroDatabase)">
             <summary>
             Generates a PX4 v1.14+ Control Allocation &amp; Airframe startup parameter script (.params / shell format)
-            directly from the C# <see cref="T:FlightDynamics6DoF.Core.Specs.AircraftConfigSpec"/> and <see cref="T:FlightDynamics6DoF.Core.Specs.BakedAeroDatabase"/> (replacing external Python tools).
+            directly from the C# <see cref="T:FlightDynamics6DoF.Core.Specs.AircraftConfigSpec"/>, <see cref="T:FlightDynamics6DoF.Core.Specs.BakedAeroDatabase"/>, and <see cref="T:FlightDynamics6DoF.Core.Gnc.AirframeControlParameterTable"/>.
             </summary>
         </member>
         <member name="T:FlightDynamics6DoF.Core.Sensors.VirtualSensorSuite">
@@ -65,6 +71,12 @@
             <summary>
             Synchronizes internal 6-DOF kinematic state from Unity's Rigidbody when running in <see cref="F:FlightDynamics6DoF.Core.Specs.SimulationFidelityLevel.Level0_UnityRigidbody"/>,
             and returns the resulting Force and Torque vectors directly in Unity's Left-Handed local coordinates.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Dynamics.FlightTelemetryLogger">
+            <summary>
+            High-frequency academic telemetry recorder, quantitative RMSE performance analyzer,
+            CSV exporter (MATLAB/Python compatible), and self-contained interactive HTML5 + SVG vector graph report generator.
             </summary>
         </member>
         <member name="T:FlightDynamics6DoF.Core.Specs.SimulationFidelityLevel">

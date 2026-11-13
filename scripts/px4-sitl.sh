@@ -110,6 +110,98 @@ colima_cleanup_containers() {
   nerdctl_cmd rm -f unity-px4-sitl unity-ros2-dds unitydrone-px4-sitl-1 unitydrone-ros2-1 >/dev/null 2>&1 || true
 }
 
+is_container_running() {
+  local cname="$1"
+  if [[ "$BACKEND" == "apple" ]]; then
+    container ps 2>/dev/null | grep -q "$cname"
+  else
+    nerdctl_cmd ps 2>/dev/null | grep -q "$cname"
+  fi
+}
+
+start_ros2_container() {
+  local force_restart="${1:-0}"
+  if [[ "$force_restart" != "1" ]] && is_container_running "unity-ros2-dds"; then
+    echo "[${BACKEND}] 'unity-ros2-dds' is already running (keeping live DDS / ROS 2 topics intact)."
+    return 0
+  fi
+
+  if [[ "$BACKEND" == "apple" ]]; then
+    ensure_apple_container
+    container stop unity-ros2-dds >/dev/null 2>&1 || true
+    container rm unity-ros2-dds >/dev/null 2>&1 || true
+    echo "[Apple Container] Starting 'unity-ros2-dds' (ROS 2 Humble + Micro-XRCE-DDS Agent)..."
+    container run -d --name unity-ros2-dds \
+      flightdynamics6dof/ros2-humble:latest
+  else
+    ensure_colima_containerd
+    nerdctl_cmd rm -f unity-ros2-dds unitydrone-ros2-1 >/dev/null 2>&1 || true
+    echo "[Colima containerd] Starting 'unity-ros2-dds' (ROS 2 Humble + Micro-XRCE-DDS Agent)..."
+    nerdctl_cmd run -d --name unity-ros2-dds \
+      --network host \
+      -e ROS_DOMAIN_ID=0 \
+      -e RMW_IMPLEMENTATION=rmw_fastrtps_cpp \
+      -e UXRCE_AGENT_PORT=8888 \
+      flightdynamics6dof/ros2-humble:latest
+  fi
+}
+
+stop_ros2_container() {
+  if [[ "$BACKEND" == "apple" ]]; then
+    container stop unity-ros2-dds >/dev/null 2>&1 || true
+    container rm unity-ros2-dds >/dev/null 2>&1 || true
+  else
+    nerdctl_cmd rm -f unity-ros2-dds unitydrone-ros2-1 >/dev/null 2>&1 || true
+  fi
+  echo "[${BACKEND}] Stopped 'unity-ros2-dds'."
+}
+
+start_px4_container() {
+  local model_name="$1"
+  if [[ "$BACKEND" == "apple" ]]; then
+    ensure_apple_container
+    container stop unity-px4-sitl >/dev/null 2>&1 || true
+    container rm unity-px4-sitl >/dev/null 2>&1 || true
+    local ros2_ip=""
+    if is_container_running "unity-ros2-dds"; then
+      ros2_ip="$(apple_get_container_ip unity-ros2-dds)"
+    fi
+    echo "[Apple Container] Starting 'unity-px4-sitl' (Model: $model_name -> macOS Unity TCP 4560)..."
+    container run -d --name unity-px4-sitl \
+      --env "PX4_SIM_MODEL=$model_name" \
+      --env "PX4_SIMULATOR=none" \
+      --env "PX4_UXRCE_DDS_HOST=${ros2_ip:-127.0.0.1}" \
+      --env "PX4_UXRCE_DDS_PORT=8888" \
+      --volume "$PX4_DIR:/workspace/PX4-Autopilot" \
+      --volume "$CONFIG_DIR:/workspace/config" \
+      flightdynamics6dof/px4-sitl:latest
+  else
+    ensure_colima_containerd
+    nerdctl_cmd rm -f unity-px4-sitl unitydrone-px4-sitl-1 >/dev/null 2>&1 || true
+    echo "[Colima containerd] Starting 'unity-px4-sitl' (Model: $model_name -> macOS Unity TCP 4560 & QGC UDP 14550)..."
+    nerdctl_cmd run -d --name unity-px4-sitl \
+      --network host \
+      -e "PX4_SIM_MODEL=$model_name" \
+      -e "PX4_SIMULATOR=none" \
+      -e "PX4_SIM_HOSTNAME=host.lima.internal" \
+      -e "PX4_UXRCE_DDS_HOST=127.0.0.1" \
+      -e "PX4_UXRCE_DDS_PORT=8888" \
+      -v "$PX4_DIR:/workspace/PX4-Autopilot" \
+      -v "$CONFIG_DIR:/workspace/config" \
+      flightdynamics6dof/px4-sitl:latest
+  fi
+}
+
+stop_px4_container() {
+  if [[ "$BACKEND" == "apple" ]]; then
+    container stop unity-px4-sitl >/dev/null 2>&1 || true
+    container rm unity-px4-sitl >/dev/null 2>&1 || true
+  else
+    nerdctl_cmd rm -f unity-px4-sitl unitydrone-px4-sitl-1 >/dev/null 2>&1 || true
+  fi
+  echo "[${BACKEND}] Stopped 'unity-px4-sitl'."
+}
+
 # ==============================================================================
 # Backend 2: Apple `container` CLI (macOS native Virtualization.framework)
 # ==============================================================================
@@ -185,57 +277,40 @@ case "$ACTION" in
 
   up|run)
     ensure_px4_repo
+    # Decoupled lifecycle: keep unity-ros2-dds alive if already running while replacing unity-px4-sitl
+    start_ros2_container 0
     if [[ "$BACKEND" == "apple" ]]; then
-      ensure_apple_container
-      container stop unity-px4-sitl unity-ros2-dds >/dev/null 2>&1 || true
-      container rm unity-px4-sitl unity-ros2-dds >/dev/null 2>&1 || true
-
-      echo "[Apple Container] Starting 'unity-ros2-dds' (ROS 2 Humble + Micro-XRCE-DDS Agent)..."
-      container run -d --name unity-ros2-dds \
-        flightdynamics6dof/ros2-humble:latest
-
       sleep 1
-      ROS2_IP="$(apple_get_container_ip unity-ros2-dds)"
-      echo "[Apple Container] 'unity-ros2-dds' running at IP: ${ROS2_IP:-auto}"
-
-      echo "[Apple Container] Starting 'unity-px4-sitl' (Model: $MODEL -> macOS Unity TCP 4560)..."
-      container run -d --name unity-px4-sitl \
-        --env "PX4_SIM_MODEL=$MODEL" \
-        --env "PX4_SIMULATOR=none" \
-        --env "PX4_UXRCE_DDS_HOST=${ROS2_IP:-127.0.0.1}" \
-        --env "PX4_UXRCE_DDS_PORT=8888" \
-        --volume "$PX4_DIR:/workspace/PX4-Autopilot" \
-        --volume "$CONFIG_DIR:/workspace/config" \
-        flightdynamics6dof/px4-sitl:latest
-    else
-      ensure_colima_containerd
-      colima_cleanup_containers
-
-      echo "[Colima containerd] Starting 'unity-ros2-dds' (ROS 2 Humble + Micro-XRCE-DDS Agent)..."
-      nerdctl_cmd run -d --name unity-ros2-dds \
-        --network host \
-        -e ROS_DOMAIN_ID=0 \
-        -e RMW_IMPLEMENTATION=rmw_fastrtps_cpp \
-        -e UXRCE_AGENT_PORT=8888 \
-        flightdynamics6dof/ros2-humble:latest
-
-      echo "[Colima containerd] Starting 'unity-px4-sitl' (Model: $MODEL -> macOS Unity TCP 4560 & QGC UDP 14550)..."
-      nerdctl_cmd run -d --name unity-px4-sitl \
-        --network host \
-        -e "PX4_SIM_MODEL=$MODEL" \
-        -e "PX4_SIMULATOR=none" \
-        -e "PX4_SIM_HOSTNAME=host.lima.internal" \
-        -e "PX4_UXRCE_DDS_HOST=127.0.0.1" \
-        -e "PX4_UXRCE_DDS_PORT=8888" \
-        -v "$PX4_DIR:/workspace/PX4-Autopilot" \
-        -v "$CONFIG_DIR:/workspace/config" \
-        flightdynamics6dof/px4-sitl:latest
     fi
+    start_px4_container "$MODEL"
 
     echo ""
-    echo "[Running] Both containers are active on ${BACKEND}:"
-    echo "  1. unity-px4-sitl -> Connects to macOS Unity TCP server (:4560)"
-    echo "  2. unity-ros2-dds -> MicroXRCEAgent on UDP :8888 (bridging /fmu/in/* & /fmu/out/*)"
+    echo "[Running] Decoupled SITL containers active on ${BACKEND}:"
+    echo "  1. unity-px4-sitl (${MODEL}, isolated rootfs) -> macOS Unity TCP :4560"
+    echo "  2. unity-ros2-dds -> MicroXRCEAgent on UDP :8888 (preserved across airframe switches)"
+    ;;
+
+  start-px4)
+    ensure_px4_repo
+    start_px4_container "$MODEL"
+    ;;
+
+  stop-px4)
+    stop_px4_container
+    ;;
+
+  start-ros2)
+    start_ros2_container 1
+    ;;
+
+  stop-ros2)
+    stop_ros2_container
+    ;;
+
+  reset-rootfs)
+    echo "[Cleanup] Removing isolated PX4 SITL parameter caches (rootfs_*)..."
+    rm -rf "$PX4_DIR/build/px4_sitl_container/tmp/rootfs"* 2>/dev/null || true
+    echo "[Success] Isolated rootfs caches cleared."
     ;;
 
   down|stop)
@@ -252,8 +327,7 @@ case "$ACTION" in
     ;;
 
   restart)
-    echo "[Restarting] Stopping and restarting containers for model '${MODEL}'..."
-    "$0" down
+    echo "[Restarting] Restarting unity-px4-sitl with model '${MODEL}' (keeping ROS 2 if healthy)..."
     "$0" up "$MODEL"
     ;;
 
@@ -267,6 +341,7 @@ case "$ACTION" in
     ;;
 
   status-info)
+    echo "BACKEND=${BACKEND}"
     if [[ "$BACKEND" == "apple" ]]; then
       if command -v container >/dev/null 2>&1; then
         echo "VM_STATUS=RUNNING"
@@ -277,14 +352,25 @@ case "$ACTION" in
       fi
       container ps -a --format "{{.Names}}|{{.Status}}|{{.Image}}|{{.Ports}}" 2>/dev/null || true
     else
-      if colima status --profile "$COLIMA_PROFILE" 2>&1 | grep -qi "is running"; then
+      colima_running=0
+      if command -v colima >/dev/null 2>&1; then
+        if colima status --profile "$COLIMA_PROFILE" >/dev/null 2>&1; then
+          colima_running=1
+        elif colima list 2>/dev/null | awk -v p="$COLIMA_PROFILE" 'NR>1 && $1==p && tolower($2)=="running" {found=1} END{exit !found}'; then
+          colima_running=1
+        fi
+      fi
+
+      if [[ "$colima_running" == "1" ]]; then
         echo "VM_STATUS=RUNNING"
-        if colima --profile "$COLIMA_PROFILE" nerdctl -- version >/dev/null 2>&1; then
+        if ps_out="$(colima nerdctl -p "$COLIMA_PROFILE" -- ps -a --format "{{.Names}}|{{.Status}}|{{.Image}}|{{.Ports}}" 2>/dev/null)"; then
           echo "CONTAINERD_STATUS=ACTIVE"
+          if [[ -n "$ps_out" ]]; then
+            printf '%s\n' "$ps_out"
+          fi
         else
           echo "CONTAINERD_STATUS=DEGRADED"
         fi
-        colima nerdctl -p "$COLIMA_PROFILE" -- ps -a --format "{{.Names}}|{{.Status}}|{{.Image}}|{{.Ports}}" 2>/dev/null || true
       else
         echo "VM_STATUS=STOPPED"
         echo "CONTAINERD_STATUS=INACTIVE"

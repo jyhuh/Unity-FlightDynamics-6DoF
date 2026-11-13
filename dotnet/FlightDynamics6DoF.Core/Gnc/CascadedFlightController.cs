@@ -20,6 +20,13 @@ namespace FlightDynamics6DoF.Core.Gnc
         AutoLand = 7
     }
 
+    public enum FixedWingFlightPhase
+    {
+        GroundRoll = 0,
+        RotationAndClimbout = 1,
+        CruiseAndLoiter = 2
+    }
+
     [Serializable]
     public struct MissionWaypointNed
     {
@@ -78,6 +85,41 @@ namespace FlightDynamics6DoF.Core.Gnc
 
         public IReadOnlyList<MissionWaypointNed> MissionWaypoints => _missionWaypoints;
         public int ActiveWaypointIndex => _activeWaypointIndex;
+
+        public AirframeControlParameterTable ParameterTable { get; private set; } =
+            AirframeControlParameterTable.CreateMultirotorDefault();
+
+        public FixedWingFlightPhase CurrentFixedWingPhase { get; private set; } =
+            FixedWingFlightPhase.GroundRoll;
+
+        public void ApplyParameterTable(AirframeControlParameterTable table)
+        {
+            if (table == null) return;
+            ParameterTable = table;
+
+            KpPosXY = table.KpPosXY;
+            KpPosZ = table.KpPosZ;
+            MaxHorizontalSpeedMps = table.AirspeedMaxMps;
+            MaxVerticalSpeedMps = table.MaxClimbRateMps;
+
+            KpVelXY = table.KpVelXY;
+            KiVelXY = table.KiVelXY;
+            KdVelXY = table.KdVelXY;
+
+            KpVelZ = table.KpVelZ;
+            KiVelZ = table.KiVelZ;
+            KdVelZ = table.KdVelZ;
+
+            KpAttitudeRollPitch = table.McRollPitchP;
+            KpAttitudeYaw = table.McYawP;
+
+            KpRateRollPitch = table.McRollPitchRateP;
+            KiRateRollPitch = table.McRollPitchRateI;
+            KdRateRollPitch = table.McRollPitchRateD;
+
+            KpRateYaw = table.McYawRateP;
+            KiRateYaw = table.McYawRateI;
+        }
 
         public void SetMissionWaypoints(IEnumerable<MissionWaypointNed> waypoints)
         {
@@ -144,6 +186,11 @@ namespace FlightDynamics6DoF.Core.Gnc
             outControls16.Clear();
             if (!IsArmed || CurrentMode == AutopilotFlightMode.Disarmed || dt <= 1e-6)
                 return;
+
+            if (ParameterTable.Category != config.Category)
+            {
+                ApplyParameterTable(AirframeControlParameterTable.CreateForCategory(config.Category, config, db));
+            }
 
             // 1. High-level Navigation / Guidance Loop
             UpdateGuidanceSetpoints(state);
@@ -213,6 +260,7 @@ namespace FlightDynamics6DoF.Core.Gnc
                     gravity);
 
                 qDes = Quatd.FromEulerZyx(desiredRoll, desiredPitch, TargetYawRad);
+                TargetAttitudeBodyToNed = qDes;
                 Vec3d bodyUpNed = state.AttitudeBodyToNed.RotateBodyToNed(new Vec3d(0.0, 0.0, -1.0));
                 double cosTilt = System.Math.Max(0.5, -bodyUpNed.Z);
                 collectiveThrustN = (mass * aUp) / cosTilt;
@@ -258,30 +306,115 @@ namespace FlightDynamics6DoF.Core.Gnc
             SixDofState state,
             Span<double> outControls16)
         {
-            Vec3d posErr = TargetPositionNed - state.PositionNed;
-            double desiredCourse = System.Math.Atan2(posErr.Y, posErr.X);
             Vec3d euler = state.AttitudeBodyToNed.ToEulerZyx();
+            double roll = euler.X;
+            double pitch = euler.Y;
+            double yaw = euler.Z;
 
-            double headingErr = desiredCourse - euler.Z;
-            headingErr = headingErr - 2.0 * System.Math.PI * System.Math.Floor((headingErr + System.Math.PI) / (2.0 * System.Math.PI));
+            double vMin = System.Math.Max(10.0, ParameterTable.AirspeedMinMps);
+            double vCruise = System.Math.Max(vMin + 2.0, ParameterTable.AirspeedTrimMps);
+            double vRotate = 0.85 * vMin;
 
-            double desiredRoll = System.Math.Clamp(1.2 * headingErr, -0.6, 0.6);
-            double altErrUp = -posErr.Z;
-            double desiredPitch = (db.TrimAlphaDeg * FrameConverter.Deg2Rad) +
-                                  System.Math.Clamp(0.05 * altErrUp, -0.35, 0.35);
+            double desiredRoll;
+            double desiredPitch;
+            double desiredCourseRad;
+            double throttle;
 
-            Quatd qDes = Quatd.FromEulerZyx(desiredRoll, desiredPitch, euler.Z);
-            Vec3d attErr = Quatd.AttitudeErrorBody(state.AttitudeBodyToNed, qDes);
-            Vec3d rateDes = new Vec3d(4.0 * attErr.X, 4.0 * attErr.Y, 1.5 * attErr.Z);
+            Vec3d horizTarget = new Vec3d(TargetPositionNed.X, TargetPositionNed.Y, 0.0);
+            Vec3d posErr = TargetPositionNed - state.PositionNed;
+            bool hasHorizontalTarget = horizTarget.Magnitude >= 5.0 ||
+                                       (CurrentMode == AutopilotFlightMode.WaypointMission && _missionWaypoints.Count > 0);
+
+            if (state.IsGrounded && state.AirspeedMps < vRotate)
+            {
+                // Stage 1: Runway acceleration on tricycle gear
+                CurrentFixedWingPhase = FixedWingFlightPhase.GroundRoll;
+                desiredRoll = 0.0;
+                desiredPitch = 0.02;
+                desiredCourseRad = TargetYawRad;
+                throttle = ParameterTable.ThrottleMax;
+            }
+            else if ((state.IsGrounded && state.AirspeedMps >= vRotate) ||
+                     (!state.IsGrounded && state.AltitudeAglMeters < 3.5))
+            {
+                // Stage 2: Smooth nose-up rotation & wings-level initial climbout
+                CurrentFixedWingPhase = FixedWingFlightPhase.RotationAndClimbout;
+                desiredRoll = 0.0;
+                desiredPitch = System.Math.Clamp(ParameterTable.RunwayTakeoffPitchDeg, 5.0, 16.0) * FrameConverter.Deg2Rad;
+                desiredCourseRad = TargetYawRad;
+                throttle = ParameterTable.ThrottleMax;
+            }
+            else
+            {
+                // Stage 3: TECS-inspired altitude & airspeed cruise/climb + lateral L1 guidance
+                CurrentFixedWingPhase = FixedWingFlightPhase.CruiseAndLoiter;
+                double targetAltAgl = System.Math.Max(5.0, -TargetPositionNed.Z);
+                double altErrUp = targetAltAgl - state.AltitudeAglMeters;
+                double climbRateUp = -state.VelocityNed.Z;
+                double speedErr = vCruise - state.AirspeedMps;
+
+                double trimPitchRad = (System.Math.Clamp(db.TrimAlphaDeg, -2.0, 6.0) + ParameterTable.LevelPitchOffsetDeg) * FrameConverter.Deg2Rad;
+                double climbPitchCmd = System.Math.Clamp(
+                    0.045 * altErrUp - 0.035 * climbRateUp,
+                    System.Math.Max(-15.0, ParameterTable.FwPitchMinDeg) * FrameConverter.Deg2Rad,
+                    System.Math.Min(18.0, ParameterTable.FwPitchMaxDeg) * FrameConverter.Deg2Rad);
+
+                // Protect minimum airspeed near stall by relaxing pitch-up demand
+                if (state.AirspeedMps < vMin)
+                {
+                    double deficit = vMin - state.AirspeedMps;
+                    climbPitchCmd -= System.Math.Clamp(0.06 * deficit, 0.0, 0.20);
+                }
+
+                desiredPitch = trimPitchRad + climbPitchCmd;
+                throttle = System.Math.Clamp(
+                    ParameterTable.ThrottleTrimOrHover + 0.08 * speedErr + 0.03 * altErrUp,
+                    ParameterTable.ThrottleMin,
+                    ParameterTable.ThrottleMax);
+
+                desiredCourseRad = hasHorizontalTarget
+                    ? System.Math.Atan2(posErr.Y, posErr.X)
+                    : TargetYawRad;
+
+                double headingErr = desiredCourseRad - yaw;
+                headingErr -= 2.0 * System.Math.PI * System.Math.Floor((headingErr + System.Math.PI) / (2.0 * System.Math.PI));
+
+                double maxBankRad = System.Math.Clamp(ParameterTable.FwMaxRollAngleDeg, 15.0, 45.0) * FrameConverter.Deg2Rad;
+                desiredRoll = System.Math.Clamp(0.85 * headingErr, -maxBankRad, maxBankRad);
+            }
+
+            double finalHeadingErr = desiredCourseRad - yaw;
+            finalHeadingErr -= 2.0 * System.Math.PI * System.Math.Floor((finalHeadingErr + System.Math.PI) / (2.0 * System.Math.PI));
+            TargetAttitudeBodyToNed = Quatd.FromEulerZyx(desiredRoll, desiredPitch, desiredCourseRad);
+
+            // Outer attitude P -> angular rate setpoints
+            double tauR = System.Math.Max(0.15, ParameterTable.FwRollTimeConstantSec);
+            double tauP = System.Math.Max(0.15, ParameterTable.FwPitchTimeConstantSec);
+            double pDes = System.Math.Clamp((desiredRoll - roll) / tauR, -2.5, 2.5);
+            double qDes = System.Math.Clamp((desiredPitch - pitch) / tauP, -2.0, 2.0);
+            double rDes = state.AltitudeAglMeters < 3.5
+                ? System.Math.Clamp(1.2 * finalHeadingErr, -1.5, 1.5)
+                : System.Math.Clamp(
+                    (IsaAtmosphereAndTurbulence.GravityMps2 / System.Math.Max(10.0, state.AirspeedMps)) * System.Math.Tan(roll) + 0.35 * finalHeadingErr,
+                    -1.5, 1.5);
+
+            Vec3d rateDes = new Vec3d(pDes, qDes, rDes);
             Vec3d rateErr = rateDes - state.AngularVelocityBodyFrd;
+            _rateIntegralFrd += rateErr * dt;
+            _rateIntegralFrd = new Vec3d(
+                System.Math.Clamp(_rateIntegralFrd.X, -0.35, 0.35),
+                System.Math.Clamp(_rateIntegralFrd.Y, -0.35, 0.35),
+                System.Math.Clamp(_rateIntegralFrd.Z, -0.35, 0.35));
 
+            double uRoll = ParameterTable.FwRollRateP * rateErr.X + ParameterTable.FwRollRateI * _rateIntegralFrd.X + ParameterTable.FwRollRateFF * pDes;
+            double uPitch = ParameterTable.FwPitchRateP * rateErr.Y + ParameterTable.FwPitchRateI * _rateIntegralFrd.Y + ParameterTable.FwPitchRateFF * qDes;
+            double uYaw = ParameterTable.FwYawRateP * rateErr.Z + ParameterTable.FwYawRateI * _rateIntegralFrd.Z + ParameterTable.FwYawRateFF * rDes;
+
+            double qScale = System.Math.Max(20.0, 0.5 * 1.225 * System.Math.Max(8.0, state.AirspeedMps) * System.Math.Max(8.0, state.AirspeedMps) * config.ReferenceAreaSqM);
             Vec3d momentCmd = new Vec3d(
-                2.5 * rateErr.X,
-                3.5 * rateErr.Y,
-                1.5 * rateErr.Z);
-
-            double speedErr = config.DesignCruiseSpeedMps - state.AirspeedMps;
-            double throttle = System.Math.Clamp(db.TrimThrottleNormalized + 0.08 * speedErr, 0.15, 1.0);
+                uRoll * (qScale * config.ReferenceSpanMeters * 0.08),
+                uPitch * (qScale * config.ReferenceChordMeters * 0.12),
+                uYaw * (qScale * config.ReferenceSpanMeters * 0.06));
 
             WrenchControlAllocator.AllocateActuators(
                 config, db, momentCmd, 0.0, throttle, state.AirspeedMps, outControls16);

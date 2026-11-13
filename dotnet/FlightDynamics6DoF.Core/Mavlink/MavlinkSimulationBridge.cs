@@ -301,19 +301,11 @@ namespace FlightDynamics6DoF.Core.Mavlink
             byte[] buf,
             Action<ReadOnlyMemory<byte>> sendCallback)
         {
-            (string name, float val)[] list = new[]
-            {
-                ("MPC_XY_P", (float)c.KpPosXY),
-                ("MPC_Z_P", (float)c.KpPosZ),
-                ("MPC_XY_VEL_P", (float)c.KpVelXY),
-                ("MPC_Z_VEL_P", (float)c.KpVelZ),
-                ("MC_ROLL_P", (float)c.KpAttitudeRollPitch),
-                ("MC_ROLLRATE_P", (float)c.KpRateRollPitch)
-            };
+            var list = c.ParameterTable.GetMavlinkParameterList();
 
-            for (ushort i = 0; i < list.Length; i++)
+            for (ushort i = 0; i < list.Count; i++)
             {
-                int len = MavlinkV2Codec.PackParamValue(_txSequence++, SystemId, ComponentId, list[i].name, list[i].val, (ushort)list.Length, i, buf);
+                int len = MavlinkV2Codec.PackParamValue(_txSequence++, SystemId, ComponentId, list[i].Name, list[i].Value, (ushort)list.Count, i, buf);
                 sendCallback(new ReadOnlyMemory<byte>(buf, 0, len));
                 TotalFramesSent++;
             }
@@ -321,6 +313,12 @@ namespace FlightDynamics6DoF.Core.Mavlink
 
         private static void ApplyParameterUpdate(CascadedFlightController c, string name, float val)
         {
+            if (c.ParameterTable.TrySetParameter(name, val))
+            {
+                c.ApplyParameterTable(c.ParameterTable);
+                return;
+            }
+
             switch (name)
             {
                 case "MPC_XY_P": c.KpPosXY = val; break;

@@ -134,9 +134,33 @@ patch_container_init_scripts() {
     sed -i "s|uxrce_dds_client start -t udp -h .* -p|uxrce_dds_client start -t udp -h ${ROS2_DDS_IP} -p|g" "$RC_S"
   fi
 
-  # 2. Clean any custom CA parameter overrides from px4-rc.params so PX4 uses valid airframe defaults (e.g. 10016_none_iris)
+  # 2. Clean any previous custom CA/Unity parameter overrides and inject airframe-specific table if present
   if [[ -f "$RC_PARAMS" ]]; then
     sed -i '/# BEGIN_UNITY_STAGE1_CA_PARAMS/,/# END_UNITY_STAGE1_CA_PARAMS/d' "$RC_PARAMS"
+
+    local PARAMS_FILE=""
+    for candidate in \
+      "/workspace/config/unity_airframe_${RAW_SIM_MODEL}.params" \
+      "/workspace/config/unity_airframe_${PX4_SIM_MODEL}.params" \
+      "/workspace/config/unity_airframe.params"; do
+      if [[ -f "$candidate" ]]; then
+        PARAMS_FILE="$candidate"
+        break
+      fi
+    done
+
+    if [[ -n "$PARAMS_FILE" ]]; then
+      echo "[px4-sitl] Injecting airframe control parameter table from: $PARAMS_FILE"
+      echo "" >> "$RC_PARAMS"
+      if ! grep -q "# BEGIN_UNITY_STAGE1_CA_PARAMS" "$PARAMS_FILE"; then
+        echo "# BEGIN_UNITY_STAGE1_CA_PARAMS" >> "$RC_PARAMS"
+        cat "$PARAMS_FILE" >> "$RC_PARAMS"
+        echo "" >> "$RC_PARAMS"
+        echo "# END_UNITY_STAGE1_CA_PARAMS" >> "$RC_PARAMS"
+      else
+        cat "$PARAMS_FILE" >> "$RC_PARAMS"
+      fi
+    fi
   fi
 
   # 3. Forward QGroundControl GCS MAVLink stream to macOS host IP (${MACOS_HOST_IP}:14550)
@@ -154,8 +178,12 @@ case "$ACTION" in
     build_px4_sitl
     patch_container_init_scripts
 
-    ROOTFS_DIR="$BUILD_DIR/tmp/rootfs"
+    ROOTFS_DIR="$BUILD_DIR/tmp/rootfs_${PX4_SIM_MODEL}"
     ETC_DIR="$BUILD_DIR/etc"
+    if [[ "${RESET_ROOTFS:-0}" == "1" ]]; then
+      echo "[px4-sitl] Clearing isolated rootfs parameter store for ${PX4_SIM_MODEL}..."
+      rm -f "$ROOTFS_DIR/parameters.bson" "$ROOTFS_DIR/eeprom/parameters" || true
+    fi
     mkdir -p "$ROOTFS_DIR"
 
     cd "$ROOTFS_DIR"
@@ -164,7 +192,7 @@ case "$ACTION" in
     unset PX4_SIM_HOSTNAME
     export PX4_SIM_HOST_ADDR="$MACOS_HOST_IP"
 
-    echo "[px4-sitl] Connecting to Unity TCP server at ${MACOS_HOST_IP}:4560 (PX4_SIM_MODEL=${PX4_SIM_MODEL})..."
+    echo "[px4-sitl] Connecting to Unity TCP server at ${MACOS_HOST_IP}:4560 (Model=${PX4_SIM_MODEL}, Rootfs=${ROOTFS_DIR})..."
     exec "$BUILD_DIR/bin/px4" -d "$ETC_DIR" -w "$ROOTFS_DIR" -s etc/init.d-posix/rcS
     ;;
 

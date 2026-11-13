@@ -28,6 +28,8 @@ namespace FlightDynamics6DoF.Tests
             TestStage1AnalysisAndStabilityDerivatives();
             TestStage2MultiFidelityClosedLoopFlight();
             TestMavlinkV2SitlAndGcsProtocol();
+            TestAirframeParameterTableAndFixedWingClosedLoopStability();
+            TestAcademicTelemetryLoggerAndReportExport();
 
             Console.WriteLine("----------------------------------------------------------------------");
             Console.WriteLine($" ALL {_passed} ENGINEERING ASSERTIONS PASSED SUCCESSFULLY.");
@@ -318,6 +320,144 @@ namespace FlightDynamics6DoF.Tests
             bridge.ProcessIncomingBytes(hilWire.Slice(0, hilLen), engine, controller);
             AssertTrue(bridge.ReceivedActuatorControlsThisStep, "Bridge decoded HIL_ACTUATOR_CONTROLS frame");
             AssertNear(engine.State.ActuatorControlsNormalized[0], 0.72, 1e-4, "Engine received SITL actuator control ch0");
+        }
+
+        private static void TestAirframeParameterTableAndFixedWingClosedLoopStability()
+        {
+            Console.WriteLine("[8/9] Verifying Per-Airframe Parameter Tables, 3-Axis Control Surface Signs & Closed-Loop Fixed-Wing Flight...");
+
+            // 1. Parameter Tables & PX4 .params scripts for all 3 categories
+            var mc = AircraftConfigSpec.CreateStandardQuadcopterX();
+            var mcDb = StabilityAndTrimAnalyzer.AnalyzeAndBake(mc);
+            var mcTable = AirframeControlParameterTable.CreateForCategory(VehicleAirframeCategory.Multirotor, mc, mcDb);
+            string mcParams = mcTable.GeneratePx4ParameterScript(mc, mcDb);
+            AssertTrue(mcParams.Contains("param set CA_AIRFRAME 0"), "Multirotor params set CA_AIRFRAME 0");
+            AssertTrue(mcParams.Contains("param set MPC_XY_CRUISE"), "Multirotor params include MPC_XY_CRUISE");
+
+            var fw = AircraftConfigSpec.CreateFixedWingUav();
+            var fwDb = StabilityAndTrimAnalyzer.AnalyzeAndBake(fw);
+            var fwTable = AirframeControlParameterTable.CreateForCategory(VehicleAirframeCategory.FixedWing, fw, fwDb);
+            string fwParams = fwTable.GeneratePx4ParameterScript(fw, fwDb);
+            AssertTrue(fwParams.Contains("param set CA_AIRFRAME 1"), "FixedWing params set CA_AIRFRAME 1");
+            AssertTrue(fwParams.Contains("param set FW_THR_MAX 1.00"), "FixedWing params remove 0.6 throttle cap");
+            AssertTrue(fwParams.Contains("param set TRIM_PITCH 0.020"), "FixedWing params correct negative trim pitch");
+            AssertTrue(fwParams.Contains("param set PWM_MAIN_REV 0"), "FixedWing params clear rudder reversal flag");
+            AssertTrue(fwParams.Contains("param set RWTO_TKOFF 1"), "FixedWing params enable runway auto takeoff");
+
+            var vtol = AircraftConfigSpec.CreateQuadPlaneVtolMillie();
+            var vtolDb = StabilityAndTrimAnalyzer.AnalyzeAndBake(vtol);
+            var vtolTable = AirframeControlParameterTable.CreateForCategory(VehicleAirframeCategory.HybridQuadPlaneVtol, vtol, vtolDb);
+            string vtolParams = vtolTable.GeneratePx4ParameterScript(vtol, vtolDb);
+            AssertTrue(vtolParams.Contains("param set CA_AIRFRAME 2"), "VTOL params set CA_AIRFRAME 2");
+            AssertTrue(vtolParams.Contains("param set MPC_THR_HOVER"), "VTOL params include hover gains");
+            AssertTrue(vtolParams.Contains("param set FW_AIRSPD_TRIM"), "VTOL params include fixed-wing cruise gains");
+
+            // 2. 3-Axis Control Surface Sign Conventions in 3D VLM Solver
+            var atm = IsaAtmosphereAndTurbulence.Evaluate(100.0);
+            var panels = VlmAndLiftingLineSolver.BuildPanels(fw.Wings);
+            Vec3d vCruise = new Vec3d(18.0, 0.0, 0.5);
+            double[] ctrl = new double[16];
+
+            // Single-channel +roll -> +Mx
+            Array.Clear(ctrl, 0, ctrl.Length);
+            ctrl[5] = 0.5;
+            var resRollSingle = VlmAndLiftingLineSolver.Evaluate(fw.Wings, panels, vCruise, Vec3d.Zero, fw.CenterOfGravityFrd, atm, ctrl, null, null, true);
+            AssertTrue(resRollSingle.TotalMomentAboutCgFrd.X > 0.05, $"Single-channel +aileron generates +Mx roll moment (got {resRollSingle.TotalMomentAboutCgFrd.X:F4} Nm)");
+
+            // Dual-channel PX4 +roll (ch5=-0.5 left, ch6=+0.5 right) -> +Mx
+            Array.Clear(ctrl, 0, ctrl.Length);
+            ctrl[5] = -0.5;
+            ctrl[6] = 0.5;
+            var resRollDual = VlmAndLiftingLineSolver.Evaluate(fw.Wings, panels, vCruise, Vec3d.Zero, fw.CenterOfGravityFrd, atm, ctrl, null, null, true);
+            AssertTrue(resRollDual.TotalMomentAboutCgFrd.X > 0.05, $"PX4 dual-channel +aileron generates +Mx roll moment (got {resRollDual.TotalMomentAboutCgFrd.X:F4} Nm)");
+
+            // Baseline elevator vs +elevator pitch-up -> positive delta My
+            Array.Clear(ctrl, 0, ctrl.Length);
+            var resBase = VlmAndLiftingLineSolver.Evaluate(fw.Wings, panels, vCruise, Vec3d.Zero, fw.CenterOfGravityFrd, atm, ctrl, null, null, true);
+            ctrl[7] = 0.5;
+            var resElev = VlmAndLiftingLineSolver.Evaluate(fw.Wings, panels, vCruise, Vec3d.Zero, fw.CenterOfGravityFrd, atm, ctrl, null, null, true);
+            AssertTrue(resElev.TotalMomentAboutCgFrd.Y > resBase.TotalMomentAboutCgFrd.Y + 0.05,
+                $"Positive elevator command increases +My nose-up moment ({resElev.TotalMomentAboutCgFrd.Y:F4} > {resBase.TotalMomentAboutCgFrd.Y:F4})");
+
+            // Positive rudder -> +Mz yaw right
+            Array.Clear(ctrl, 0, ctrl.Length);
+            ctrl[8] = 0.5;
+            var resRud = VlmAndLiftingLineSolver.Evaluate(fw.Wings, panels, vCruise, Vec3d.Zero, fw.CenterOfGravityFrd, atm, ctrl, null, null, true);
+            AssertTrue(resRud.TotalMomentAboutCgFrd.Z > 0.05, $"Positive rudder command generates +Mz nose-right yaw moment (got {resRud.TotalMomentAboutCgFrd.Z:F4} Nm)");
+
+            // 3. 15-second Closed-Loop Fixed-Wing Runway Takeoff, Climbout & Cruise Stability
+            var engine = new MultiFidelitySixDofEngine(fw, fwDb) { FidelityLevel = SimulationFidelityLevel.Level2_6DoFBladeAndStrip };
+            var controller = new CascadedFlightController();
+            controller.ApplyParameterTable(fwTable);
+            engine.ResetState(Vec3d.Zero, Quatd.Identity);
+            controller.CommandTakeoff(Vec3d.Zero, 0.0, 25.0);
+
+            Span<double> u16 = stackalloc double[16];
+            double dt = 0.005;
+            double maxAbsRollCruiseDeg = 0.0;
+            for (int step = 0; step < 3000; step++) // 15.0 s
+            {
+                controller.ComputeControlStep(dt, fw, fwDb, engine.State, u16);
+                engine.SetActuatorControls(u16);
+                engine.StepSimulation(dt);
+
+                if (step >= 1200) // After liftoff (t >= 6.0 s)
+                {
+                    double absRoll = System.Math.Abs(engine.State.AttitudeBodyToNed.ToEulerZyx().X * FrameConverter.Rad2Deg);
+                    if (absRoll > maxAbsRollCruiseDeg) maxAbsRollCruiseDeg = absRoll;
+                }
+            }
+
+            Console.WriteLine($"      [Fixed-Wing 15s Closed-Loop] Alt={engine.State.AltitudeAglMeters:F2} m, Airspeed={engine.State.AirspeedMps:F2} m/s, Max|Roll|={maxAbsRollCruiseDeg:F2} deg, Phase={controller.CurrentFixedWingPhase}");
+            AssertTrue(engine.State.AltitudeAglMeters > 6.0, $"Fixed-wing closed-loop climbed above 6m AGL (got {engine.State.AltitudeAglMeters:F2} m)");
+            AssertTrue(engine.State.AirspeedMps > 13.0, $"Fixed-wing closed-loop maintained forward airspeed > 13 m/s (got {engine.State.AirspeedMps:F2} m/s)");
+            AssertTrue(maxAbsRollCruiseDeg < 3.0, $"Fixed-wing closed-loop held wings level (Max|Roll| = {maxAbsRollCruiseDeg:F2} deg < 3.0 deg)");
+        }
+
+        private static void TestAcademicTelemetryLoggerAndReportExport()
+        {
+            Console.WriteLine("[9/9] Verifying Academic Telemetry Logger, RMSE Metrics, CSV & HTML5/SVG Report Export...");
+            var fw = AircraftConfigSpec.CreateFixedWingUav();
+            var fwDb = StabilityAndTrimAnalyzer.AnalyzeAndBake(fw);
+            var engine = new MultiFidelitySixDofEngine(fw, fwDb) { FidelityLevel = SimulationFidelityLevel.Level2_6DoFBladeAndStrip };
+            var ctrl = new CascadedFlightController();
+            ctrl.ApplyParameterTable(AirframeControlParameterTable.CreateFixedWingDefault(fw, fwDb));
+
+            var logger = new FlightTelemetryLogger { SampleRateHz = 50.0 };
+            logger.StartRecording();
+            engine.ResetState(Vec3d.Zero, Quatd.Identity);
+            ctrl.CommandTakeoff(Vec3d.Zero, 0.0, 20.0);
+
+            Span<double> u16 = stackalloc double[16];
+            double dt = 0.005;
+            for (int step = 0; step < 1200; step++) // 6.0 s
+            {
+                ctrl.ComputeControlStep(dt, fw, fwDb, engine.State, u16);
+                engine.SetActuatorControls(u16);
+                engine.StepSimulation(dt);
+                logger.RecordStep(engine, ctrl);
+            }
+
+            var metrics = logger.ComputeMetrics();
+            AssertTrue(metrics.SampleCount > 100, $"Recorded > 100 telemetry frames at 50 Hz (got {metrics.SampleCount})");
+            AssertTrue(!double.IsNaN(metrics.AltitudeRmseMeters) && metrics.AltitudeRmseMeters >= 0.0, "Finite Altitude RMSE computed");
+            AssertTrue(!double.IsNaN(metrics.AirspeedRmseMps) && metrics.AirspeedRmseMps >= 0.0, "Finite Airspeed RMSE computed");
+
+            string csv = logger.ExportToCsvString();
+            AssertTrue(csv.Contains("SimTimeSec,Category,Fidelity") && csv.Contains("AltitudeAgl_m"), "CSV contains valid academic column headers");
+
+            string html = logger.ExportToAcademicHtmlReportString("Automated Verification Report");
+            AssertTrue(html.Contains("<!DOCTYPE html>") && html.Contains("<svg") && html.Contains("<polyline"), "HTML report contains interactive SVG vector polylines");
+
+            // Verify CSV round-trip and MaxFrames retention cap
+            var reloaded = new FlightTelemetryLogger { MaxFrames = 5000 };
+            int loadedCount = reloaded.LoadFromCsvString(csv);
+            AssertTrue(loadedCount == logger.Frames.Count, $"CSV round-trip reloaded exact frame count ({loadedCount} == {logger.Frames.Count})");
+            AssertTrue(System.Math.Abs(reloaded.Frames[loadedCount - 1].AltitudeAgl - logger.Frames[loadedCount - 1].AltitudeAgl) < 1e-3, "CSV round-trip preserved final AltitudeAgl");
+
+            reloaded.MaxFrames = 50;
+            reloaded.EnforceMaxFrames();
+            AssertTrue(reloaded.Frames.Count == 50, $"EnforceMaxFrames capped frame buffer to 50 (got {reloaded.Frames.Count})");
         }
     }
 }

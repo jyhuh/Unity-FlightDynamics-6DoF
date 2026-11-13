@@ -437,6 +437,37 @@ namespace FlightDynamics6DoF.Unity
                 GUILayout.EndHorizontal();
             }
 
+            GUILayout.Space(4);
+            var logger = PrimaryVehicle.TelemetryLogger;
+            var metrics = logger.ComputeMetrics();
+            GUILayout.Label($"<b>[6. Academic Telemetry Logger ({logger.Frames.Count} frames @ {logger.SampleRateHz:F0}Hz)]</b>");
+            GUILayout.Label($"Metrics: Alt RMSE={metrics.AltitudeRmseMeters:F2}m | V RMSE={metrics.AirspeedRmseMps:F2}m/s | Roll RMSE={metrics.RollRmseDeg:F2}deg");
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(logger.IsRecording ? "Pause Log" : "Record Log"))
+            {
+                if (logger.IsRecording) logger.PauseRecording();
+                else logger.StartRecording();
+            }
+            if (GUILayout.Button("Clear"))
+            {
+                logger.Clear();
+            }
+            if (GUILayout.Button("Save CSV"))
+            {
+                string outDir = System.IO.Path.Combine(Application.dataPath, "FlightLogs");
+                string csvPath = System.IO.Path.Combine(outDir, $"flight_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+                logger.ExportToCsvFile(csvPath);
+                Debug.Log($"[FlightDynamics6DoF] Exported academic CSV telemetry to: {csvPath}");
+            }
+            if (GUILayout.Button("Save HTML Plot"))
+            {
+                string outDir = System.IO.Path.Combine(Application.dataPath, "FlightLogs");
+                string htmlPath = System.IO.Path.Combine(outDir, $"flight_report_{DateTime.Now:yyyyMMdd_HHmmss}.html");
+                logger.ExportToAcademicHtmlReportFile(htmlPath, $"FlightDynamics 6-DOF Report - {PrimaryVehicle.ActiveConfig.AircraftName}");
+                Debug.Log($"[FlightDynamics6DoF] Exported interactive HTML/SVG plot report to: {htmlPath}");
+            }
+            GUILayout.EndHorizontal();
+
             GUILayout.EndScrollView();
             GUILayout.EndArea();
         }

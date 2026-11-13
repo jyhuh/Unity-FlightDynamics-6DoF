@@ -5,7 +5,9 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using UnityEngine;
+using FlightDynamics6DoF.Core.Aerodynamics;
 using FlightDynamics6DoF.Core.Gnc;
+using FlightDynamics6DoF.Core.Specs;
 using Debug = UnityEngine.Debug;
 
 namespace FlightDynamics6DoF.Unity
@@ -157,20 +159,55 @@ namespace FlightDynamics6DoF.Unity
 
         public void ExportStage1AirframeParamsForContainer()
         {
-            if (TargetVehicle == null) return;
             try
             {
-                string configDir = Path.Combine(WorkspaceRootPath, "docker", "config");
+                string wsRoot = EffectiveWorkspaceRoot;
+                if (string.IsNullOrEmpty(wsRoot)) return;
+
+                string configDir = Path.Combine(wsRoot, "docker", "config");
                 Directory.CreateDirectory(configDir);
-                string caScript = WrenchControlAllocator.GeneratePx4AirframeParameterScript(
-                    TargetVehicle.ActiveConfig,
-                    TargetVehicle.ActiveBakedDatabase);
-                File.WriteAllText(Path.Combine(configDir, "unity_airframe.params"), caScript);
+
+                if (TargetVehicle != null)
+                {
+                    TargetVehicle.SyncAirframeControlParameterTable(resetIfCategoryChanged: false);
+                    string caScript = TargetVehicle.ControlParameterTable.GeneratePx4ParameterScript(
+                        TargetVehicle.ActiveConfig,
+                        TargetVehicle.ActiveBakedDatabase);
+
+                    string activeModel = TargetVehicle.ControlParameterTable.Px4SitlModelName;
+                    if (!string.IsNullOrEmpty(activeModel))
+                    {
+                        Px4AirframeModel = activeModel;
+                        File.WriteAllText(Path.Combine(configDir, $"unity_airframe_{activeModel}.params"), caScript);
+                    }
+                    File.WriteAllText(Path.Combine(configDir, "unity_airframe.params"), caScript);
+                }
+
+                // Ensure per-airframe default parameter files exist so CLI container switches always stay isolated
+                EnsureCanonicalAirframeParamsIfMissing(configDir, "iris", VehicleAirframeCategory.Multirotor);
+                EnsureCanonicalAirframeParamsIfMissing(configDir, "plane", VehicleAirframeCategory.FixedWing);
+                EnsureCanonicalAirframeParamsIfMissing(configDir, "standard_vtol", VehicleAirframeCategory.HybridQuadPlaneVtol);
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[FlightDynamics6DoF] Could not write docker/config/unity_airframe.params: {ex.Message}");
+                Debug.LogWarning($"[FlightDynamics6DoF] Could not write docker/config airframe params: {ex.Message}");
             }
+        }
+
+        private static void EnsureCanonicalAirframeParamsIfMissing(string configDir, string modelName, VehicleAirframeCategory cat)
+        {
+            string path = Path.Combine(configDir, $"unity_airframe_{modelName}.params");
+            if (File.Exists(path)) return;
+
+            AircraftConfigSpec spec = cat switch
+            {
+                VehicleAirframeCategory.FixedWing => AircraftConfigSpec.CreateFixedWingUav(),
+                VehicleAirframeCategory.HybridQuadPlaneVtol => AircraftConfigSpec.CreateQuadPlaneVtolMillie(),
+                _ => AircraftConfigSpec.CreateStandardQuadcopterX()
+            };
+            var db = StabilityAndTrimAnalyzer.AnalyzeAndBake(spec);
+            var table = AirframeControlParameterTable.CreateForCategory(cat, spec, db);
+            File.WriteAllText(path, table.GeneratePx4ParameterScript(spec, db));
         }
 
         /// <summary>
@@ -211,7 +248,44 @@ namespace FlightDynamics6DoF.Unity
         public bool SwitchAirframeModelAndRestart(string modelName)
         {
             Px4AirframeModel = modelName;
-            return StartPx4SitlProcess();
+            return StartPx4Only(modelName);
+        }
+
+        public bool StartPx4Only(string modelName)
+        {
+            Px4AirframeModel = modelName;
+            ExportStage1AirframeParamsForContainer();
+            if (RuntimeBackend != ContainerRuntimeBackend.NativeBinary)
+                return RunContainerAction("start-px4", $"[{RuntimeBackend}] Starting/restarting unity-px4-sitl ({modelName}, isolated rootfs)...");
+            return StartNativePx4Process();
+        }
+
+        public bool StopPx4Only()
+        {
+            if (RuntimeBackend != ContainerRuntimeBackend.NativeBinary)
+                return RunContainerAction("stop-px4", $"[{RuntimeBackend}] Stopping unity-px4-sitl container...");
+            return true;
+        }
+
+        public bool StartRos2Only()
+        {
+            if (RuntimeBackend != ContainerRuntimeBackend.NativeBinary)
+                return RunContainerAction("start-ros2", $"[{RuntimeBackend}] Starting/restarting unity-ros2-dds container...");
+            return false;
+        }
+
+        public bool StopRos2Only()
+        {
+            if (RuntimeBackend != ContainerRuntimeBackend.NativeBinary)
+                return RunContainerAction("stop-ros2", $"[{RuntimeBackend}] Stopping unity-ros2-dds container...");
+            return false;
+        }
+
+        public bool ResetIsolatedRootfs()
+        {
+            if (RuntimeBackend != ContainerRuntimeBackend.NativeBinary)
+                return RunContainerAction("reset-rootfs", $"[{RuntimeBackend}] Clearing isolated PX4 rootfs caches...");
+            return false;
         }
 
         private bool RunContainerAction(string actionVerb, string summaryMessage)

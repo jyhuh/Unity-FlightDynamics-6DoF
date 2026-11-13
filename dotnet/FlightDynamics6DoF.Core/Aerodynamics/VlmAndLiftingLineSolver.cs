@@ -400,16 +400,18 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                 case ControlSurfaceType.Aileron:
                 {
                     // Dual aileron support (e.g., PX4 PWM_MAIN_FUNC6/7 on Ch 5 & Ch 6):
-                    // If a valid secondary aileron channel is actively driven, map left/right halves directly.
+                    // In PX4 gazebo-classic_plane/standard_vtol, CA_SV_CS0_TRQ_R=-0.5 (left, ch 5) and CA_SV_CS1_TRQ_R=+0.5 (right, ch 6).
+                    // Positive roll command (+Mx, right wing down) gives controls[5] < 0 and controls[6] > 0.
+                    // Left wing (!IsRightHalf) needs +delta (+lift), Right wing (IsRightHalf) needs -delta (-lift).
                     int secChan = p.ControlChannel + 1;
-                    if (secChan < controls.Length && System.Math.Abs(controls[secChan]) > 1e-4 && p.IsRightHalf)
+                    if (secChan < controls.Length && System.Math.Abs(controls[secChan]) > 1e-4)
                     {
                         double secCmd = System.Math.Clamp(controls[secChan], -1.0, 1.0);
-                        return secCmd * p.MaxDeflectionRad;
+                        return (p.IsRightHalf ? -secCmd : -cmd) * p.MaxDeflectionRad;
                     }
 
                     // Single unified roll channel (e.g. Ch 5 / roll command):
-                    // Positive roll command (+cmd) deflects right aileron UP (-Cl) and left aileron DOWN (+Cl)
+                    // Positive roll command (+cmd) deflects right aileron UP (-Cl) and left aileron DOWN (+Cl) -> +Mx
                     return (p.IsRightHalf ? -1.0 : 1.0) * cmd * p.MaxDeflectionRad;
                 }
                 case ControlSurfaceType.Elevator:
@@ -417,8 +419,11 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                     // Positive pitch command (+cmd from PX4 PWM_MAIN_FUNC8 / stick back) deflects elevator UP (trailing edge up, -Cl tail),
                     // producing tail downforce and positive Nose-Up pitching moment (+My)
                     return -cmd * p.MaxDeflectionRad;
-                case ControlSurfaceType.Flap:
                 case ControlSurfaceType.Rudder:
+                    // Vertical fin has NormalFrd = (0, +1, 0) and rArm.X < 0 behind CG.
+                    // Positive yaw command (+cmd -> +Mz nose right) requires negative side force (-Y_FRD) pushing tail left.
+                    return -cmd * p.MaxDeflectionRad;
+                case ControlSurfaceType.Flap:
                 case ControlSurfaceType.Elevon:
                     return cmd * p.MaxDeflectionRad;
                 default:

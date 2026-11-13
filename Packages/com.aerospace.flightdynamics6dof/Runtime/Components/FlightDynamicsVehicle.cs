@@ -2,6 +2,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using FlightDynamics6DoF.Core.Aerodynamics;
 using FlightDynamics6DoF.Core.Dynamics;
@@ -24,6 +25,7 @@ namespace FlightDynamics6DoF.Unity
         public AircraftProfileAsset? ProfileAsset;
         public AircraftConfigSpec InlineConfig = AircraftConfigSpec.CreateStandardQuadcopterX();
         public BakedAeroDatabase InlineBakedDatabase = new BakedAeroDatabase();
+        public AirframeControlParameterTable ControlParameterTable = AirframeControlParameterTable.CreateMultirotorDefault();
 
         [Header("Stage 2: Real-Time Simulation Fidelity Tier")]
         public SimulationFidelityLevel FidelityLevel = SimulationFidelityLevel.Level2_6DoFBladeAndStrip;
@@ -51,10 +53,12 @@ namespace FlightDynamics6DoF.Unity
         private CascadedFlightController? _flightController;
         private Rigidbody? _unityRigidbody;
         private readonly double[] _controlBuffer16 = new double[16];
+        private bool _telemetrySavedForCurrentSession;
 
         public MultiFidelitySixDofEngine? Engine => _engine;
         public VirtualSensorSuite? SensorSuite => _sensorSuite;
         public CascadedFlightController? FlightController => _flightController;
+        public FlightTelemetryLogger TelemetryLogger { get; } = new FlightTelemetryLogger();
         public VirtualSensorReadings LatestSensorReadings { get; private set; }
 
         public AircraftConfigSpec ActiveConfig =>
@@ -83,10 +87,60 @@ namespace FlightDynamics6DoF.Unity
 
         private void Start()
         {
+            var retention = FlightLogRetentionSettings.Load();
+            TelemetryLogger.MaxFrames = retention.MaxFramesInMemory;
+            TelemetryLogger.StartRecording();
+            _telemetrySavedForCurrentSession = false;
+
             if (AutoArmAndTakeoffOnStart && _flightController != null && _engine != null)
             {
                 Vec3d euler = _engine.State.AttitudeBodyToNed.ToEulerZyx();
                 _flightController.CommandTakeoff(_engine.State.PositionNed, euler.Z, InitialTakeoffAltitudeMeters);
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (Application.isPlaying && !_telemetrySavedForCurrentSession && TelemetryLogger.Frames.Count > 1)
+                AutoSaveTelemetryLogs();
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (!_telemetrySavedForCurrentSession && TelemetryLogger.Frames.Count > 1)
+                AutoSaveTelemetryLogs();
+        }
+
+        public string AutoSaveTelemetryLogs()
+        {
+            if (TelemetryLogger.Frames.Count == 0)
+                return "";
+
+            try
+            {
+                string logDir = Path.Combine(Application.dataPath, "FlightLogs");
+                Directory.CreateDirectory(logDir);
+                string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string safeModel = ActiveConfig.AircraftName.Replace(' ', '_').Replace('/', '_');
+                string csvPath = Path.Combine(logDir, $"flight_{safeModel}_{stamp}.csv");
+                string htmlPath = Path.Combine(logDir, $"flight_{safeModel}_{stamp}.html");
+
+                TelemetryLogger.ExportToCsvFile(csvPath);
+                TelemetryLogger.ExportToAcademicHtmlReportFile(htmlPath, $"FlightDynamics 6-DOF Report - {ActiveConfig.AircraftName}");
+                _telemetrySavedForCurrentSession = true;
+
+                var retention = FlightLogRetentionSettings.Load();
+                int pruned = retention.ApplyRetentionPolicy(logDir);
+                if (pruned > 0)
+                    Debug.Log($"[FlightDynamics6DoF] Pruned {pruned} oldest flight log session(s) per retention policy.");
+
+                Debug.Log($"[FlightDynamics6DoF] Auto-saved flight telemetry ({TelemetryLogger.Frames.Count} frames) to Assets/FlightLogs/: {Path.GetFileName(csvPath)} & {Path.GetFileName(htmlPath)}");
+                return csvPath;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[FlightDynamics6DoF] Failed auto-saving flight logs: {ex.Message}");
+                return "";
             }
         }
 
@@ -132,7 +186,21 @@ namespace FlightDynamics6DoF.Unity
             if (_engine != null)
                 _engine.Reconfigure(ActiveConfig, db);
 
+            SyncAirframeControlParameterTable(resetIfCategoryChanged: true);
             return db;
+        }
+
+        public void SyncAirframeControlParameterTable(bool resetIfCategoryChanged = false)
+        {
+            var cfg = ActiveConfig;
+            var db = ActiveBakedDatabase;
+            if (ControlParameterTable == null ||
+                (resetIfCategoryChanged && ControlParameterTable.Category != cfg.Category))
+            {
+                ControlParameterTable = AirframeControlParameterTable.CreateForCategory(cfg.Category, cfg, db);
+            }
+            ControlParameterTable.SyncFieldsFromEntries();
+            _flightController?.ApplyParameterTable(ControlParameterTable);
         }
 
         public void InitializeSimulationEngine()
@@ -147,6 +215,7 @@ namespace FlightDynamics6DoF.Unity
 
             _sensorSuite = new VirtualSensorSuite(cfg.Sensors);
             _flightController = new CascadedFlightController();
+            SyncAirframeControlParameterTable(resetIfCategoryChanged: true);
 
             Vec3d initialPosNed = FrameConverter.UnityToNedPosition(new Vec3d(transform.position.x, transform.position.y, transform.position.z));
             Quatd initialRotNed = FrameConverter.UnityToNedRotation(new Quatd(transform.rotation.w, transform.rotation.x, transform.rotation.y, transform.rotation.z));
@@ -247,6 +316,7 @@ namespace FlightDynamics6DoF.Unity
             LatestSensorReadings = _sensorSuite.Sample(
                 _engine.State, dt, _engine.OriginLatitudeDeg, _engine.OriginLongitudeDeg, _engine.OriginAltitudeMsl);
 
+            TelemetryLogger.RecordStep(_engine, _flightController);
             UpdateVisualRotors((float)dt);
         }
 
