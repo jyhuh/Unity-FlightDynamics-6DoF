@@ -61,7 +61,10 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
 WORKDIR /workspace
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY unity_mavlink_standby_proxy.cpp /tmp/unity_mavlink_standby_proxy.cpp
+RUN g++ -std=c++17 -O2 -Wall -Wextra /tmp/unity_mavlink_standby_proxy.cpp -o /usr/local/bin/unity_mavlink_standby_proxy && \
+    rm -f /tmp/unity_mavlink_standby_proxy.cpp && \
+    chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/unity_mavlink_standby_proxy
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["run"]

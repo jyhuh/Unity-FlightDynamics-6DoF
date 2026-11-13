@@ -26,9 +26,11 @@ flowchart LR
 ### Network Communication Ports
 | Protocol / Port | Direction | Source $\to$ Destination | Description |
 | :--- | :--- | :--- | :--- |
-| **TCP 4560** | Bidirectional | `unity-px4-sitl` $\to$ macOS Unity | Lockstep MAVLink HIL protocol (Sensors & Actuator controls) |
+| **TCP 4560** | Bidirectional | `unity-px4-sitl` $\to$ macOS Unity | Lockstep MAVLink HIL protocol (Sensors & Actuator controls) via C++ standby proxy (`127.0.0.1:14560` $\leftrightarrow$ `host:4560`) |
 | **UDP 14550** | Outbound | `unity-px4-sitl` $\to$ macOS QGC | Standard MAVLink telemetry stream for QGroundControl |
 | **UDP 8888** | Local VM | `unity-px4-sitl` $\to$ `unity-ros2-dds` | Micro-XRCE-DDS client-agent bridge for uORB $\leftrightarrow$ ROS 2 topics |
+
+> **C++17 MAVLink Standby Proxy (`unity_mavlink_standby_proxy`)**: PX4-Autopilot runs unmodified upstream by connecting to `127.0.0.1:14560` inside the container. When Unity is not in Play Mode, the proxy feeds 250 Hz standby `HIL_SENSOR` / `HIL_GPS` frames with monotonic timestamps and sea-level-consistent pressure (`1007.26 hPa` at `50 m` MSL) so EKF2 and QGC stay alive; once Unity Play Mode opens `:4560`, it seamlessly bridges Unity's live sensor stream to PX4.
 
 ---
 

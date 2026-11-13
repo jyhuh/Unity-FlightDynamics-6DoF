@@ -167,6 +167,12 @@ patch_container_init_scripts() {
   if [[ -f "$RC_MAVLINK" ]]; then
     sed -i "s|mavlink start -x -u \$udp_gcs_port_local -r 4000000 -f.*|mavlink start -x -u \$udp_gcs_port_local -r 4000000 -f -t ${MACOS_HOST_IP} -o 14550|g" "$RC_MAVLINK"
   fi
+
+  # 4. Use internal port 14560 for PX4 <-> standby proxy so Lima never steals macOS host port 4560 from Unity
+  local RC_SIM="$BUILD_DIR/etc/init.d-posix/px4-rc.simulator"
+  if [[ -f "$RC_SIM" ]]; then
+    sed -i 's|simulator_tcp_port=\$((4560+px4_instance))|simulator_tcp_port=$((14560+px4_instance))|g' "$RC_SIM"
+  fi
 }
 
 case "$ACTION" in
@@ -190,10 +196,26 @@ case "$ACTION" in
     export PX4_SIM_MODEL="$PX4_SIM_MODEL"
     export PX4_SIMULATOR="none"
     unset PX4_SIM_HOSTNAME
-    export PX4_SIM_HOST_ADDR="$MACOS_HOST_IP"
+    export PX4_SIM_HOST_ADDR="127.0.0.1"
 
-    echo "[px4-sitl] Connecting to Unity TCP server at ${MACOS_HOST_IP}:4560 (Model=${PX4_SIM_MODEL}, Rootfs=${ROOTFS_DIR})..."
-    exec "$BUILD_DIR/bin/px4" -d "$ETC_DIR" -w "$ROOTFS_DIR" -s etc/init.d-posix/rcS
+    PROXY_BIN="/usr/local/bin/unity_mavlink_standby_proxy"
+    if [[ -x "$PROXY_BIN" ]]; then
+      echo "[px4-sitl] Starting C++ MAVLink standby proxy (127.0.0.1:14560 <-> ${MACOS_HOST_IP}:4560)..."
+      "$PROXY_BIN" --host "$MACOS_HOST_IP" --port 4560 --listen-port 14560 &
+      PROXY_PID=$!
+      trap 'kill "$PROXY_PID" 2>/dev/null || true' EXIT
+      for _ in {1..30}; do
+        if nc -z 127.0.0.1 14560 2>/dev/null; then
+          break
+        fi
+        sleep 0.1
+      done
+    else
+      export PX4_SIM_HOST_ADDR="$MACOS_HOST_IP"
+    fi
+
+    echo "[px4-sitl] Connecting PX4 to local standby proxy (127.0.0.1:14560 -> Unity ${MACOS_HOST_IP}:4560, Model=${PX4_SIM_MODEL})..."
+    "$BUILD_DIR/bin/px4" -d "$ETC_DIR" -w "$ROOTFS_DIR" -s etc/init.d-posix/rcS
     ;;
 
   *)
