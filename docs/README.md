@@ -46,7 +46,7 @@ This documentation covers mathematical formulations, multi-fidelity solver archi
   - Talon-180 Research UAV Fixed-Wing (`plane`)
   - Millie-Class Hybrid QuadPlane VTOL (`standard_vtol`)
   - Actuator Channel Mapping Matrix & Smart Bi-Directional Fallback
-  - Unity Editor In-Inspector Controls (`Px4SitlProcessLauncherEditor`)
+  - Unified 5-Step Engineering Workbench (`FlightDynamicsEngineeringWizard`, `SitlInfraController`, & Step Panels) and Log Retention Settings (`FlightLogSettingsWindow`)
 
 ---
 

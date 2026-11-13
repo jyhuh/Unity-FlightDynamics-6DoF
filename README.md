@@ -26,9 +26,9 @@
   - Direct hardware-in-the-loop (HIL) lockstep (`HIL_SENSOR`, `HIL_ACTUATOR_CONTROLS`) over TCP port `4560`.
   - True dynamic pressure ($\frac{1}{2}\rho V^2$) airspeed telemetry for PX4 EKF2 wind estimation and TECS fixed-wing controllers.
   - Independent UDP telemetry stream (`UDP :14550`) for simultaneous QGroundControl mission monitoring.
-- **Containerized macOS SITL Stack**:
+- **Unified 5-Step Engineering Workbench & Containerized macOS SITL Stack**:
   - Native container management via Colima (`containerd` + `vz` + `virtiofs`) and Apple `container` CLI.
-  - Complete in-editor launcher GUI (`Px4SitlProcessLauncherEditor`) for starting, stopping, and inspecting PX4 SITL containers with zero shell friction.
+  - Unified 5-step Editor Workbench (`FlightDynamicsEngineeringWizard`) with modular panels (`AeroDesignPanel`, `InfraControlPanel`, `SimulationEnvironmentPanel`, `Px4TuningPanel`, `TelemetryLogPanel`) and `SitlInfraController` for real-time VM/container status badges, 1-click SITL startup, PX4 parameter tuning, and live telemetry plotting (`Assets/FlightLogs/` + `FlightLogSettingsWindow`).
 - **ROS 2 Humble & Micro-XRCE-DDS Support**:
   - Native uORB topic bridging over UDP port `8888` (`/fmu/in/*` and `/fmu/out/*`).
   - Pre-configured Python offboard trajectory controller for autonomous mission execution.
@@ -103,13 +103,12 @@ cd UnityDrone
 
 ### 3. Launch PX4 SITL & Run in Unity
 
-#### Option A: In-Editor 1-Click GUI (Recommended)
-1. Open the project in **Unity 6**.
-2. Navigate to the `PX4 SITL Process Launcher` component in the Inspector.
-3. Select your airframe (`Fixed-Wing (plane)` / `Quad (iris)` / `QuadPlane VTOL (standard_vtol)`).
-4. Click **[▶ Launch PX4 SITL Container]**.
-5. Press **Play** in Unity.
-6. Open **QGroundControl** to monitor telemetry or command autonomous waypoint missions.
+#### Option A: In-Editor Unified 5-Step Workbench (Recommended)
+1. Open the project in **Unity 6** and open `Tools > FlightDynamics 6-DOF > Unified 5-Step Engineering Workbench`.
+2. **Step 1 (`공력/설계`)**: Choose your airframe (`iris` / `plane` / `standard_vtol`) and run Stage-1 aerodynamic baking.
+3. **Step 2 (`인프라`)**: Click **[▶ 인프라 전체 시작]** to start Colima/Apple container runtime, `unity-px4-sitl`, and `unity-ros2-dds` while monitoring live status badges in the header.
+4. **Step 3–5 (`시뮬레이션 환경` / `PX4 튜닝` / `계측/로그`)**: Click **[▶ 시뮬레이션 시작]**, tune PX4 parameters or send `pxh>` commands, and inspect real-time telemetry plots & saved logs in `Assets/FlightLogs/`.
+5. Optionally open **QGroundControl** (`UDP :14550`) to monitor telemetry or command autonomous waypoint missions.
 
 #### Option B: Terminal CLI
 ```bash
