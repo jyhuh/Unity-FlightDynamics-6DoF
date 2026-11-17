@@ -476,6 +476,19 @@ case "$ACTION" in
     fi
     ;;
 
+  ros2-nav2)
+    echo "[ROS 2] Starting Nav2 + RViz2 (noVNC http://localhost:6080/vnc.html) inside unity-ros2-dds (${BACKEND})..."
+    if [[ "$BACKEND" == "apple" ]]; then
+      container exec unity-ros2-dds /usr/local/bin/entrypoint.sh nav2
+    else
+      if ! lsof -iTCP:6080 -sTCP:LISTEN >/dev/null 2>&1; then
+        colima ssh-config --profile "$COLIMA_PROFILE" > "/tmp/colima_ssh_${COLIMA_PROFILE}.cfg"
+        ssh -F "/tmp/colima_ssh_${COLIMA_PROFILE}.cfg" -f -N -L 6080:127.0.0.1:6080 "colima-${COLIMA_PROFILE}" >/dev/null 2>&1 || true
+      fi
+      nerdctl_cmd exec unity-ros2-dds /usr/local/bin/entrypoint.sh nav2
+    fi
+    ;;
+
   ros2-shell)
     if [[ "$BACKEND" == "apple" ]]; then
       container exec -it unity-ros2-dds bash
@@ -496,6 +509,7 @@ case "$ACTION" in
     echo "  pxh <cmd>              Send a PX4 shell command (e.g., './scripts/px4-sitl.sh pxh commander takeoff')"
     echo "  ros2-topics            List active ROS 2 /fmu/in/* and /fmu/out/* topics"
     echo "  ros2-offboard          Run the ROS 2 Offboard orbit controller node"
+    echo "  ros2-nav2              Run Nav2 + RViz2 (noVNC at http://localhost:6080/vnc.html)"
     echo "  ros2-shell             Open an interactive bash shell inside the ROS 2 Humble container"
     ;;
 esac

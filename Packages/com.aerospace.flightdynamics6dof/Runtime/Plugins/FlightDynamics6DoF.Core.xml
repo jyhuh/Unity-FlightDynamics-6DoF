@@ -247,6 +247,11 @@
             Dense linear algebra utilities for VLM aerodynamic influence matrices and Pseudoinverse Control Allocation.
             </summary>
         </member>
+        <member name="M:FlightDynamics6DoF.Core.Math.LinearAlgebra.SolveLinearSystem(System.Double[0:,0:],System.Double[],System.Double[0:,0:],System.Double[],System.Int32)">
+            <summary>
+            Zero-allocation linear system solver using caller-provided scratch buffers (aug >= n x (n+1), xOut >= n).
+            </summary>
+        </member>
         <member name="M:FlightDynamics6DoF.Core.Math.LinearAlgebra.ComputeDampedRightPseudoinverse(System.Double[0:,0:],System.Double)">
             <summary>
             Computes damped right Moore-Penrose pseudoinverse A^+ = A^T (A A^T + lambda^2 I)^-1 for m x n matrix (m &lt;= n).
@@ -433,6 +438,11 @@
         <member name="M:FlightDynamics6DoF.Core.Aerodynamics.AirfoilPolarSolver.EvaluateRotatingBladeSection(FlightDynamics6DoF.Core.Specs.AirfoilSpec,System.Double,System.Double,System.Double,System.Double,System.Double,System.Double)">
             <summary>
             Applies Du-Selig 3D rotational stall delay correction for rotating propeller/rotor blades.
+            </summary>
+        </member>
+        <member name="T:FlightDynamics6DoF.Core.Aerodynamics.VlmScratchBuffer">
+            <summary>
+            Reusable per-engine scratch buffers eliminating hot-path VLM allocations.
             </summary>
         </member>
         <member name="T:FlightDynamics6DoF.Core.Aerodynamics.VlmAndLiftingLineSolver">

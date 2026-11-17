@@ -333,6 +333,10 @@ namespace FlightDynamics6DoF.Tests
             string mcParams = mcTable.GeneratePx4ParameterScript(mc, mcDb);
             AssertTrue(mcParams.Contains("param set CA_AIRFRAME 0"), "Multirotor params set CA_AIRFRAME 0");
             AssertTrue(mcParams.Contains("param set MPC_XY_CRUISE"), "Multirotor params include MPC_XY_CRUISE");
+            AssertTrue(mcParams.Contains("param set CA_ROTOR0_KM 0."), "CCW rotor 0 exports positive CA_ROTOR0_KM");
+            AssertTrue(mcParams.Contains("param set CA_ROTOR2_KM -0."), "CW rotor 2 exports negative CA_ROTOR2_KM");
+            AssertTrue(!mcParams.Contains("CA_ROTOR0_CT 1."), "CA_ROTOR0_CT is in Newtons (>= 0.5), not scientific N/(rad/s)^2");
+            AssertTrue(mcParams.Contains("param set MC_ROLLRATE_I 0.050") && mcParams.Contains("param set MC_ROLLRATE_D 0.001"), "Multirotor params export 50 Hz rate I/D gains");
 
             var fw = AircraftConfigSpec.CreateFixedWingUav();
             var fwDb = StabilityAndTrimAnalyzer.AnalyzeAndBake(fw);
@@ -362,6 +366,10 @@ namespace FlightDynamics6DoF.Tests
             Array.Clear(ctrl, 0, ctrl.Length);
             ctrl[5] = 0.5;
             var resRollSingle = VlmAndLiftingLineSolver.Evaluate(fw.Wings, panels, vCruise, Vec3d.Zero, fw.CenterOfGravityFrd, atm, ctrl, null, null, true);
+            var scratch = new VlmScratchBuffer();
+            var resRollScratch = VlmAndLiftingLineSolver.Evaluate(fw.Wings, panels, vCruise, Vec3d.Zero, fw.CenterOfGravityFrd, atm, ctrl, null, null, true, scratch);
+            AssertNear(resRollScratch.TotalForceFrd.Z, resRollSingle.TotalForceFrd.Z, 1e-9, "VlmScratchBuffer matches unbuffered VLM force");
+            AssertNear(resRollScratch.TotalMomentAboutCgFrd.X, resRollSingle.TotalMomentAboutCgFrd.X, 1e-9, "VlmScratchBuffer matches unbuffered VLM moment");
             AssertTrue(resRollSingle.TotalMomentAboutCgFrd.X > 0.05, $"Single-channel +aileron generates +Mx roll moment (got {resRollSingle.TotalMomentAboutCgFrd.X:F4} Nm)");
 
             // Dual-channel PX4 +roll (ch5=-0.5 left, ch6=+0.5 right) -> +Mx

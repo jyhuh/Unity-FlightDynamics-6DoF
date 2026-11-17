@@ -104,16 +104,16 @@ namespace FlightDynamics6DoF.Editor
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("Step 5.1: 실시간 비행 계측 및 자동 로그 저장 (Assets/FlightLogs/)", EditorStyles.boldLabel);
+            GUILayout.Label("Step 5.1: Real-Time Telemetry & Auto-Logging (Assets/FlightLogs/)", EditorStyles.boldLabel);
             GUILayout.FlexibleSpace();
             GUI.backgroundColor = new Color(0.85f, 0.92f, 1f);
-            if (GUILayout.Button("⚙ 로그/용량 상한 설정", GUILayout.Width(160), GUILayout.Height(22)))
+            if (GUILayout.Button("⚙ Log Retention Settings", GUILayout.Width(165), GUILayout.Height(22)))
                 FlightLogSettingsWindow.ShowWindow();
             GUI.backgroundColor = Color.white;
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-            GUILayout.Label($"저장된 로그 ({csvCount}/{retention.MaxLogFilesOnDisk}개, {totalMb:F1}/{retention.MaxTotalLogSizeMb:F0} MB):", GUILayout.Width(240));
+            GUILayout.Label($"Saved Logs ({csvCount}/{retention.MaxLogFilesOnDisk}, {totalMb:F1}/{retention.MaxTotalLogSizeMb:F0} MB):", GUILayout.Width(240));
             if (_savedLogLabels.Length > 0)
             {
                 int nextIdx = EditorGUILayout.Popup(Mathf.Clamp(_selectedSavedLogIndex, 0, _savedLogLabels.Length - 1), _savedLogLabels);
@@ -122,37 +122,37 @@ namespace FlightDynamics6DoF.Editor
                     _selectedSavedLogIndex = nextIdx;
                     LoadDiskLogAtIndex(_selectedSavedLogIndex);
                 }
-                if (GUILayout.Button("선택 로그 다시 읽기", GUILayout.Width(125)))
+                if (GUILayout.Button("Reload Selected", GUILayout.Width(115)))
                     LoadDiskLogAtIndex(_selectedSavedLogIndex);
             }
             else
             {
-                GUILayout.Label("Assets/FlightLogs/에 저장된 CSV 로그 없음", EditorStyles.miniLabel);
+                GUILayout.Label("No CSV logs found in Assets/FlightLogs/", EditorStyles.miniLabel);
             }
-            if (GUILayout.Button("목록 갱신하기", GUILayout.Width(85)))
+            if (GUILayout.Button("Refresh", GUILayout.Width(75)))
                 RefreshSavedFlightLogList(autoLoadLatestIfEmpty: true);
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
             GUI.backgroundColor = logger.IsRecording ? new Color(1f, 0.6f, 0.6f) : new Color(0.55f, 1f, 0.65f);
-            if (GUILayout.Button(logger.IsRecording ? "기록 일시정지" : "기록 시작/재개", GUILayout.Height(26)))
+            if (GUILayout.Button(logger.IsRecording ? "Pause Recording" : "Start/Resume Recording", GUILayout.Height(26)))
             {
                 if (logger.IsRecording) logger.PauseRecording();
                 else logger.StartRecording();
             }
             GUI.backgroundColor = Color.white;
 
-            if (GUILayout.Button("버퍼 초기화", GUILayout.Height(26)))
+            if (GUILayout.Button("Clear Buffer", GUILayout.Height(26)))
             {
                 logger.Clear();
                 _loadedDiskLogger.Clear();
                 _loadedDiskLogPath = "";
             }
 
-            if (GUILayout.Button("15초 고정익 데모 플롯 생성", GUILayout.Height(26)))
+            if (GUILayout.Button("Generate 15s FW Demo", GUILayout.Height(26)))
                 GenerateClosedLoopFixedWingDemoLog();
 
-            if (GUILayout.Button("Assets/FlightLogs에 즉시 저장", GUILayout.Height(26)))
+            if (GUILayout.Button("Save to Assets/FlightLogs", GUILayout.Height(26)))
             {
                 Directory.CreateDirectory(logDir);
                 string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
@@ -166,7 +166,7 @@ namespace FlightDynamics6DoF.Editor
                 Debug.Log($"[FlightDynamics6DoF] Saved logs to Assets/FlightLogs/: {Path.GetFileName(csvPath)}, {Path.GetFileName(htmlPath)}");
             }
 
-            if (GUILayout.Button("로그 폴더 열기", GUILayout.Height(26)))
+            if (GUILayout.Button("Open Log Folder", GUILayout.Height(26)))
             {
                 Directory.CreateDirectory(logDir);
                 EditorUtility.RevealInFinder(logDir);
@@ -174,18 +174,18 @@ namespace FlightDynamics6DoF.Editor
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
-            logger.SampleRateHz = EditorGUILayout.Slider("샘플링 속도 [Hz]", (float)logger.SampleRateHz, 10f, 250f);
-            _plotWindowSec = EditorGUILayout.Slider("그래프 표시 창 [s]", _plotWindowSec, 5f, 120f);
+            logger.SampleRateHz = EditorGUILayout.Slider("Sample Rate [Hz]", (float)logger.SampleRateHz, 10f, 250f);
+            _plotWindowSec = EditorGUILayout.Slider("Plot Window [s]", _plotWindowSec, 5f, 120f);
             EditorGUILayout.EndHorizontal();
 
             string sourceLabel = (vehicle != null && vehicle.TelemetryLogger.Frames.Count > 0)
-                ? "실시간 시뮬레이션 버퍼"
-                : (!string.IsNullOrEmpty(_loadedDiskLogPath) ? $"디스크 로그: {Path.GetFileName(_loadedDiskLogPath)}" : "오프라인 데모/빈 버퍼");
+                ? "Live Simulation Buffer"
+                : (!string.IsNullOrEmpty(_loadedDiskLogPath) ? $"Disk Log: {Path.GetFileName(_loadedDiskLogPath)}" : "Offline Demo / Empty Buffer");
 
             EditorGUILayout.HelpBox(
-                $"[{sourceLabel}] 기록 프레임: {metrics.SampleCount} (상한 {retention.MaxFramesInMemory:N0}) | 시간: {metrics.DurationSec:F2} s | " +
-                $"고도 RMSE: {metrics.AltitudeRmseMeters:F3} m (최대오차 {metrics.AltitudeMaxErrorMeters:F2} m) | " +
-                $"대기속도 RMSE: {metrics.AirspeedRmseMps:F2} m/s | 롤 RMSE: {metrics.RollRmseDeg:F2} deg | 피치 RMSE: {metrics.PitchRmseDeg:F2} deg | 최대|Roll|: {metrics.MaxRollAbsDeg:F2} deg",
+                $"[{sourceLabel}] Frames: {metrics.SampleCount} (Cap {retention.MaxFramesInMemory:N0}) | Duration: {metrics.DurationSec:F2} s | " +
+                $"Alt RMSE: {metrics.AltitudeRmseMeters:F3} m (Max Err {metrics.AltitudeMaxErrorMeters:F2} m) | " +
+                $"Airspeed RMSE: {metrics.AirspeedRmseMps:F2} m/s | Roll RMSE: {metrics.RollRmseDeg:F2} deg | Pitch RMSE: {metrics.PitchRmseDeg:F2} deg | Max|Roll|: {metrics.MaxRollAbsDeg:F2} deg",
                 MessageType.Info);
             EditorGUILayout.EndVertical();
 
@@ -194,31 +194,31 @@ namespace FlightDynamics6DoF.Editor
             var frames = logger.Frames;
             if (frames.Count < 2)
             {
-                EditorGUILayout.HelpBox("아직 기록된 비행 데이터가 없습니다. 시뮬레이션 시작(Play) 시 자동으로 기록되며 종료 시 Assets/FlightLogs/에 저장됩니다.", MessageType.Warning);
+                EditorGUILayout.HelpBox("No flight telemetry recorded yet. Recording starts automatically on Play and saves to Assets/FlightLogs/ on Stop.", MessageType.Warning);
                 return;
             }
 
-            DrawVectorPlotChart(host, "1. 고도 및 상승률 추종 [m, m/s]", frames,
+            DrawVectorPlotChart(host, "1. Altitude & Climb Rate Tracking [m, m/s]", frames,
                 new[] { "Altitude AGL [m]", "Target Alt [m]", "Climb -VelD [m/s]" },
                 new[] { new Color(0.3f, 0.9f, 0.4f), Color.gray, new Color(0.35f, 0.7f, 1f) },
                 f => f.AltitudeAgl, f => f.TargetAltAgl, f => -f.VelD);
 
-            DrawVectorPlotChart(host, "2. 자세 추종 (Roll / Pitch / Yaw) [deg]", frames,
+            DrawVectorPlotChart(host, "2. Attitude Tracking (Roll / Pitch / Yaw) [deg]", frames,
                 new[] { "Roll phi", "Pitch theta", "Target Pitch", "Yaw psi" },
                 new[] { new Color(1f, 0.35f, 0.35f), new Color(0.35f, 0.7f, 1f), new Color(0.95f, 0.75f, 0.25f), new Color(0.3f, 0.9f, 0.45f) },
                 f => f.RollDeg, f => f.PitchDeg, f => f.TargetPitchDeg, f => f.YawDeg);
 
-            DrawVectorPlotChart(host, "3. 공기역학 (대기속도 / 받음각 / 옆미끄럼각) [m/s, deg]", frames,
+            DrawVectorPlotChart(host, "3. Aerodynamics (Airspeed / AoA / Sideslip) [m/s, deg]", frames,
                 new[] { "Airspeed V [m/s]", "Target V [m/s]", "Alpha [deg]", "Beta [deg]" },
                 new[] { new Color(0.45f, 0.8f, 1f), Color.gray, new Color(0.85f, 0.55f, 1f), new Color(1f, 0.65f, 0.3f) },
                 f => f.AirspeedMps, f => f.TargetAirspeedMps, f => f.AlphaDeg, f => f.BetaDeg);
 
-            DrawVectorPlotChart(host, "4. 기체 각속도 및 공력 모멘트 [deg/s, Nm]", frames,
+            DrawVectorPlotChart(host, "4. Body Rates & Aerodynamic Moments [deg/s, Nm]", frames,
                 new[] { "p [deg/s]", "q [deg/s]", "r [deg/s]", "Mx [Nm]", "My [Nm]" },
                 new[] { new Color(1f, 0.45f, 0.45f), new Color(0.45f, 0.8f, 1f), new Color(0.45f, 0.95f, 0.55f), new Color(0.85f, 0.55f, 1f), new Color(1f, 0.65f, 0.3f) },
                 f => f.P_Degps, f => f.Q_Degps, f => f.R_Degps, f => f.MxNm, f => f.MyNm);
 
-            DrawVectorPlotChart(host, "5. 정규화 액추에이터 출력 [-1..1]", frames,
+            DrawVectorPlotChart(host, "5. Normalized Actuator Outputs [-1..1]", frames,
                 new[] { "Ch0/4 Thr", "Ch5 Ail-L", "Ch7 Elev", "Ch8 Rud" },
                 new[] { new Color(0.3f, 0.9f, 0.45f), new Color(1f, 0.35f, 0.35f), new Color(0.35f, 0.7f, 1f), new Color(0.85f, 0.55f, 1f) },
                 f => System.Math.Max(f.Act0, f.Act4), f => f.Act5, f => f.Act7, f => f.Act8);

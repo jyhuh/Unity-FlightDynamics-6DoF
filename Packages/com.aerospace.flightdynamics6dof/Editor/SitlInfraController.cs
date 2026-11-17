@@ -288,9 +288,9 @@ namespace FlightDynamics6DoF.Editor
             return Directory.GetCurrentDirectory();
         }
 
-        private static string GetManagerScriptPath() => Path.Combine(GetWorkspaceRoot(), "scripts", "px4-sitl.sh");
+        internal static string GetManagerScriptPath() => Path.Combine(GetWorkspaceRoot(), "scripts", "px4-sitl.sh");
 
-        private string GetBackendEnvPrefix() => Backend switch
+        internal string GetBackendEnvPrefix() => Backend switch
         {
             ContainerRuntimeBackend.ColimaContainerd => "CONTAINER_BACKEND=colima ",
             ContainerRuntimeBackend.AppleContainer => "CONTAINER_BACKEND=apple ",

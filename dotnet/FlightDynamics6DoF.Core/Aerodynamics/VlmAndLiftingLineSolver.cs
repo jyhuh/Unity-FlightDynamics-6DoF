@@ -43,6 +43,38 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
     }
 
     /// <summary>
+    /// Reusable per-engine scratch buffers eliminating hot-path VLM allocations.
+    /// </summary>
+    public sealed class VlmScratchBuffer
+    {
+        public Vec3d[] LocalVelAtQc = Array.Empty<Vec3d>();
+        public double[] ControlDeflectionRad = Array.Empty<double>();
+        public Vec3d[] VortexInducedVel = Array.Empty<Vec3d>();
+        public double[] Circulations = Array.Empty<double>();
+        public double[,] Aic = new double[0, 0];
+        public double[] Rhs = Array.Empty<double>();
+        public double[,] Aug = new double[0, 0];
+        public double[] PanelAlphaDeg = Array.Empty<double>();
+        public double[] PanelCl = Array.Empty<double>();
+
+        public void EnsureCapacity(int n)
+        {
+            if (LocalVelAtQc.Length < n)
+            {
+                LocalVelAtQc = new Vec3d[n];
+                ControlDeflectionRad = new double[n];
+                VortexInducedVel = new Vec3d[n];
+                Circulations = new double[n];
+                Aic = new double[n, n];
+                Rhs = new double[n];
+                Aug = new double[n, n + 1];
+                PanelAlphaDeg = new double[n];
+                PanelCl = new double[n];
+            }
+        }
+    }
+
+    /// <summary>
     /// Module 2: 3D Multi-Lifting-Surface Vortex Lattice Method (VLM) and Nonlinear Lifting-Line Strip Solver.
     /// Computes Biot-Savart horseshoe vortex downwash/sidewash across Main Wing, Horizontal Tail, Vertical Fin, and Canard,
     /// couples with Module 1's 2D viscous polar (+/-180 deg Viterna), and superimposes Module 4's rotor slipstream wake.
@@ -194,7 +226,8 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             double[]? actuatorControlsNormalized,
             IList<RotorSpec>? rotors = null,
             RotorBemtSolution[]? rotorSolutions = null,
-            bool enable3DVlmWakeInduction = true)
+            bool enable3DVlmWakeInduction = true,
+            VlmScratchBuffer? scratch = null)
         {
             int n = panels.Count;
             if (n == 0 || wings == null || wings.Count == 0)
@@ -212,8 +245,9 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                 ? (-aircraftVelocityFrd).Normalized()
                 : new Vec3d(-1.0, 0.0, 0.0);
 
-            Vec3d[] localVelAtQc = new Vec3d[n];
-            double[] controlDeflectionRad = new double[n];
+            scratch?.EnsureCapacity(n);
+            Vec3d[] localVelAtQc = scratch != null ? scratch.LocalVelAtQc : new Vec3d[n];
+            double[] controlDeflectionRad = scratch != null ? scratch.ControlDeflectionRad : new double[n];
 
             for (int i = 0; i < n; i++)
             {
@@ -240,13 +274,13 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
             }
 
             // Optional 3D VLM Horseshoe Vortex Induced Velocity calculation
-            Vec3d[] vortexInducedVel = new Vec3d[n];
-            double[] circulations = new double[n];
+            Vec3d[] vortexInducedVel = scratch != null ? scratch.VortexInducedVel : new Vec3d[n];
+            double[] circulations = scratch != null ? scratch.Circulations : new double[n];
 
             if (enable3DVlmWakeInduction && vFreestreamMag > 1.0)
             {
-                double[,] aic = new double[n, n];
-                double[] rhs = new double[n];
+                double[,] aic = scratch != null ? scratch.Aic : new double[n, n];
+                double[] rhs = scratch != null ? scratch.Rhs : new double[n];
 
                 for (int i = 0; i < n; i++)
                 {
@@ -275,7 +309,10 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                     }
                 }
 
-                circulations = LinearAlgebra.SolveLinearSystem(aic, rhs);
+                if (scratch != null)
+                    LinearAlgebra.SolveLinearSystem(aic, rhs, scratch.Aug, circulations, n);
+                else
+                    circulations = LinearAlgebra.SolveLinearSystem(aic, rhs);
 
                 // Compute trailing-wake downwash/sidewash at each panel's quarter-chord
                 for (int i = 0; i < n; i++)
@@ -294,14 +331,19 @@ namespace FlightDynamics6DoF.Core.Aerodynamics
                     vortexInducedVel[i] = wInd;
                 }
             }
+            else if (scratch != null)
+            {
+                Array.Clear(vortexInducedVel, 0, n);
+                Array.Clear(circulations, 0, n);
+            }
 
             Vec3d totalForceFrd = Vec3d.Zero;
             Vec3d totalMomentCgFrd = Vec3d.Zero;
             double totalLift = 0.0;
             double totalInducedDrag = 0.0;
             double totalProfileDrag = 0.0;
-            double[] panelAlphaDeg = new double[n];
-            double[] panelCl = new double[n];
+            double[] panelAlphaDeg = scratch != null ? scratch.PanelAlphaDeg : new double[n];
+            double[] panelCl = scratch != null ? scratch.PanelCl : new double[n];
 
             for (int i = 0; i < n; i++)
             {

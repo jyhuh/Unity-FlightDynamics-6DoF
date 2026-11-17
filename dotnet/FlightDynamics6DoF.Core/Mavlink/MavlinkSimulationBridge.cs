@@ -233,7 +233,7 @@ namespace FlightDynamics6DoF.Core.Mavlink
                 {
                     Span<byte> full = stackalloc byte[4];
                     full.Clear();
-                    frame.Payload.AsSpan(0, System.Math.Min(frame.Payload.Length, 4)).CopyTo(full);
+                    frame.Payload.AsSpan(0, System.Math.Min(frame.PayloadLength, 4)).CopyTo(full);
                     _expectedMissionCount = BinaryPrimitives.ReadUInt16LittleEndian(full.Slice(0, 2));
                     _uploadingMission.Clear();
 
@@ -250,7 +250,7 @@ namespace FlightDynamics6DoF.Core.Mavlink
                 {
                     Span<byte> full = stackalloc byte[38];
                     full.Clear();
-                    frame.Payload.AsSpan(0, System.Math.Min(frame.Payload.Length, 38)).CopyTo(full);
+                    frame.Payload.AsSpan(0, System.Math.Min(frame.PayloadLength, 38)).CopyTo(full);
 
                     float holdTime = MavlinkV2Codec.ReadSingle(full, 0);
                     float acceptRadius = MavlinkV2Codec.ReadSingle(full, 4);

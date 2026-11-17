@@ -75,6 +75,8 @@ namespace FlightDynamics6DoF.Unity
                     ProceduralAircraftVisualBuilder.RebuildVehicleVisuals(existingVehicle);
                 ProceduralAircraftVisualBuilder.EnsureGroundEnvironment();
                 EnsureCameraController(existingVehicle);
+                if (existingVehicle.GetComponent<Ros2LidarAndObstacleCourse>() == null)
+                    existingVehicle.gameObject.AddComponent<Ros2LidarAndObstacleCourse>();
             }
         }
 
@@ -109,6 +111,8 @@ namespace FlightDynamics6DoF.Unity
                 vehicleGo.transform.position = Vector3.zero;
                 vehicle = vehicleGo.AddComponent<FlightDynamicsVehicle>();
             }
+            if (vehicle.GetComponent<Ros2LidarAndObstacleCourse>() == null)
+                vehicle.gameObject.AddComponent<Ros2LidarAndObstacleCourse>();
 
             vehicle.InlineConfig = presetCategory switch
             {

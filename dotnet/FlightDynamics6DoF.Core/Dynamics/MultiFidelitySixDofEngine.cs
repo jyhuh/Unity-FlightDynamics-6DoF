@@ -75,6 +75,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
         public double OriginLatitudeDeg { get; set; } = 37.5665;
         public double OriginLongitudeDeg { get; set; } = 126.9780;
         public double OriginAltitudeMsl { get; set; } = 50.0;
+        private readonly VlmScratchBuffer _vlmScratch = new VlmScratchBuffer();
 
         public MultiFidelitySixDofEngine(AircraftConfigSpec config, BakedAeroDatabase? preBakedDatabase = null)
         {
@@ -242,7 +243,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
             Vec3d w0 = State.AngularVelocityBodyFrd;
 
             // k1
-            EvaluateStateDerivatives(p0, v0, q0, w0, atm, gustBodyFrd, motorAccelReactionTorqueFrd,
+            EvaluateStateDerivatives(p0, v0, q0, w0, atm, gustBodyFrd, motorAccelReactionTorqueFrd, FidelityLevel,
                 out Vec3d dp1, out Vec3d dv1, out Quatd dq1, out Vec3d dw1,
                 out Vec3d fAero1, out Vec3d mAero1, out Vec3d specForce1);
 
@@ -252,15 +253,12 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 ? SimulationFidelityLevel.Level2_6DoFBladeAndStrip
                 : FidelityLevel;
 
-            var savedFidelity = FidelityLevel;
-            FidelityLevel = subStageFidelity;
-
             // k2
             Vec3d p2 = p0 + 0.5 * h * dp1;
             Vec3d v2 = v0 + 0.5 * h * dv1;
             Quatd q2 = Quatd.AddScaled(q0, dq1, 0.5 * h);
             Vec3d w2 = w0 + 0.5 * h * dw1;
-            EvaluateStateDerivatives(p2, v2, q2, w2, atm, gustBodyFrd, motorAccelReactionTorqueFrd,
+            EvaluateStateDerivatives(p2, v2, q2, w2, atm, gustBodyFrd, motorAccelReactionTorqueFrd, subStageFidelity,
                 out Vec3d dp2, out Vec3d dv2, out Quatd dq2, out Vec3d dw2, out _, out _, out _);
 
             // k3
@@ -268,7 +266,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
             Vec3d v3 = v0 + 0.5 * h * dv2;
             Quatd q3 = Quatd.AddScaled(q0, dq2, 0.5 * h);
             Vec3d w3 = w0 + 0.5 * h * dw2;
-            EvaluateStateDerivatives(p3, v3, q3, w3, atm, gustBodyFrd, motorAccelReactionTorqueFrd,
+            EvaluateStateDerivatives(p3, v3, q3, w3, atm, gustBodyFrd, motorAccelReactionTorqueFrd, subStageFidelity,
                 out Vec3d dp3, out Vec3d dv3, out Quatd dq3, out Vec3d dw3, out _, out _, out _);
 
             // k4
@@ -276,10 +274,8 @@ namespace FlightDynamics6DoF.Core.Dynamics
             Vec3d v4 = v0 + h * dv3;
             Quatd q4 = Quatd.AddScaled(q0, dq3, h);
             Vec3d w4 = w0 + h * dw3;
-            EvaluateStateDerivatives(p4, v4, q4, w4, atm, gustBodyFrd, motorAccelReactionTorqueFrd,
+            EvaluateStateDerivatives(p4, v4, q4, w4, atm, gustBodyFrd, motorAccelReactionTorqueFrd, subStageFidelity,
                 out Vec3d dp4, out Vec3d dv4, out Quatd dq4, out Vec3d dw4, out _, out _, out _);
-
-            FidelityLevel = savedFidelity;
 
             double inv6 = h / 6.0;
             State.PositionNed = p0 + inv6 * (dp1 + 2.0 * dp2 + 2.0 * dp3 + dp4);
@@ -407,6 +403,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
             AtmosphereState atm,
             Vec3d gustBodyFrd,
             Vec3d motorAccelReactionTorqueFrd,
+            SimulationFidelityLevel fidelity,
             out Vec3d dPosNed,
             out Vec3d dVelBodyFrd,
             out Quatd dQuat,
@@ -416,7 +413,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
             out Vec3d specificForceBodyFrd)
         {
             ComputeTotalAeroAndPropulsionWrench(
-                posNed, velBodyFrd, qBodyToNed, omegaBodyFrd, atm, gustBodyFrd, FidelityLevel,
+                posNed, velBodyFrd, qBodyToNed, omegaBodyFrd, atm, gustBodyFrd, fidelity,
                 out fAeroPropFrd, out mAeroPropFrd, out Vec3d rotorSpinMomentumFrd);
 
             // Add Ground Spring-Damper Contact Force only if touching/penetrating runway (depth > 0)
@@ -616,7 +613,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 {
                     var wingRes = VlmAndLiftingLineSolver.Evaluate(
                         _config.Wings, _wingPanels, vAirRelFrd, omegaBodyFrd, _config.CenterOfGravityFrd,
-                        atm, State.ActuatorControlsNormalized, null, null, enable3DVlmWakeInduction: false);
+                        atm, State.ActuatorControlsNormalized, null, null, enable3DVlmWakeInduction: false, scratch: _vlmScratch);
                     totalForceFrd += wingRes.TotalForceFrd;
                     totalMomentCgFrd += wingRes.TotalMomentAboutCgFrd;
                 }
@@ -634,7 +631,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 {
                     var wingRes = VlmAndLiftingLineSolver.Evaluate(
                         _config.Wings, _wingPanels, vAirRelFrd, omegaBodyFrd, _config.CenterOfGravityFrd,
-                        atm, State.ActuatorControlsNormalized, _config.Rotors, _latestRotorSolutions, enable3DVlmWakeInduction: true);
+                        atm, State.ActuatorControlsNormalized, _config.Rotors, _latestRotorSolutions, enable3DVlmWakeInduction: true, scratch: _vlmScratch);
                     totalForceFrd += wingRes.TotalForceFrd;
                     totalMomentCgFrd += wingRes.TotalMomentAboutCgFrd;
                 }

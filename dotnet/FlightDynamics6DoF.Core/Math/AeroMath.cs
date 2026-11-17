@@ -263,6 +263,16 @@ namespace FlightDynamics6DoF.Core.Math
         {
             int n = b.Length;
             double[,] aug = new double[n, n + 1];
+            double[] x = new double[n];
+            SolveLinearSystem(A, b, aug, x, n);
+            return x;
+        }
+
+        /// <summary>
+        /// Zero-allocation linear system solver using caller-provided scratch buffers (aug >= n x (n+1), xOut >= n).
+        /// </summary>
+        public static void SolveLinearSystem(double[,] A, double[] b, double[,] aug, double[] xOut, int n)
+        {
             for (int i = 0; i < n; i++)
             {
                 for (int j = 0; j < n; j++) aug[i, j] = A[i, j];
@@ -305,17 +315,15 @@ namespace FlightDynamics6DoF.Core.Math
                 }
             }
 
-            double[] x = new double[n];
             for (int i = n - 1; i >= 0; i--)
             {
                 double sum = aug[i, n];
                 for (int j = i + 1; j < n; j++)
-                    sum -= aug[i, j] * x[j];
+                    sum -= aug[i, j] * xOut[j];
                 double diag = aug[i, i];
                 if (System.Math.Abs(diag) < 1e-12) diag = 1e-12;
-                x[i] = sum / diag;
+                xOut[i] = sum / diag;
             }
-            return x;
         }
 
         /// <summary>

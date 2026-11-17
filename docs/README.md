@@ -46,7 +46,12 @@ This documentation covers mathematical formulations, multi-fidelity solver archi
   - Talon-180 Research UAV Fixed-Wing (`plane`)
   - Millie-Class Hybrid QuadPlane VTOL (`standard_vtol`)
   - Actuator Channel Mapping Matrix & Smart Bi-Directional Fallback
-  - Unified 5-Step Engineering Workbench (`FlightDynamicsEngineeringWizard`, `SitlInfraController`, & Step Panels) and Log Retention Settings (`FlightLogSettingsWindow`)
+  - Unified 6-Step Engineering Workbench (`FlightDynamicsEngineeringWizard`, `SitlInfraController`, & Step Panels) and Log Retention Settings (`FlightLogSettingsWindow`)
+
+### 4. Project Task & Roadmap
+- [**Task & Roadmap Backlog**](roadmap.md)
+  - Unimplemented feature backlog (Airframe Designer Popup, Top-bar Infra Quick Controls, Altitude Wind/Gust Layers, Dynamic Telemetry Graphs)
+  - Pending verification & End-to-End testing checklist (ROS 2 + Nav2 + RViz2 noVNC, Fixed-Wing/VTOL SITL)
 
 ---
 

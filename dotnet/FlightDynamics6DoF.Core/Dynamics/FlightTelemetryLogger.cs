@@ -1,5 +1,6 @@
 // Licensed under the Apache License, Version 2.0.
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -51,7 +52,61 @@ namespace FlightDynamics6DoF.Core.Dynamics
     /// </summary>
     public class FlightTelemetryLogger
     {
-        private readonly List<TelemetryLogFrame> _fdFrames = new List<TelemetryLogFrame>();
+        private sealed class FrameRingBuffer : IReadOnlyList<TelemetryLogFrame>
+        {
+            private TelemetryLogFrame[] _items = new TelemetryLogFrame[256];
+            private int _head;
+            private int _count;
+
+            public int Count => _count;
+
+            public TelemetryLogFrame this[int index]
+            {
+                get
+                {
+                    if ((uint)index >= (uint)_count) throw new ArgumentOutOfRangeException(nameof(index));
+                    return _items[(_head + index) % _items.Length];
+                }
+            }
+
+            public void Clear()
+            {
+                _head = 0;
+                _count = 0;
+            }
+
+            public void Add(TelemetryLogFrame item)
+            {
+                if (_count == _items.Length)
+                {
+                    var next = new TelemetryLogFrame[_items.Length * 2];
+                    for (int i = 0; i < _count; i++)
+                        next[i] = _items[(_head + i) % _items.Length];
+                    _items = next;
+                    _head = 0;
+                }
+                _items[(_head + _count) % _items.Length] = item;
+                _count++;
+            }
+
+            public void TrimHead(int removeCount)
+            {
+                if (removeCount <= 0) return;
+                if (removeCount >= _count) { Clear(); return; }
+                _head = (_head + removeCount) % _items.Length;
+                _count -= removeCount;
+            }
+
+            public IEnumerator<TelemetryLogFrame> GetEnumerator()
+            {
+                for (int i = 0; i < _count; i++)
+                    yield return this[i];
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private readonly FrameRingBuffer _fdFrames = new FrameRingBuffer();
         private double _fdLastSampleSimTime = -1e9;
 
         public bool IsRecording { get; set; } = true;
@@ -81,15 +136,15 @@ namespace FlightDynamics6DoF.Core.Dynamics
             if (MaxFrames <= 0) return;
             if (_fdFrames.Count > MaxFrames)
             {
-                _fdFrames.RemoveRange(0, _fdFrames.Count - MaxFrames);
+                _fdFrames.TrimHead(_fdFrames.Count - MaxFrames);
             }
         }
 
         public void RecordFrame(TelemetryLogFrame frame)
         {
-            if (_fdFrames.Count >= MaxFrames && MaxFrames > 0)
+            if (MaxFrames > 0 && _fdFrames.Count >= MaxFrames)
             {
-                _fdFrames.RemoveAt(0);
+                _fdFrames.TrimHead(_fdFrames.Count - MaxFrames + 1);
             }
             _fdFrames.Add(frame);
             _fdLastSampleSimTime = frame.SimTimeSec;

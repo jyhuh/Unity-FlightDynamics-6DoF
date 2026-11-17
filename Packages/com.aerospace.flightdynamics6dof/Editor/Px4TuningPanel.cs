@@ -55,17 +55,17 @@ namespace FlightDynamics6DoF.Editor
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.BeginHorizontal();
-            GUILayout.Label($"Step 4.1: 기체별 PX4 & GNC 파라미터 테이블 [{EditingParamTable.Category} / PX4: {EditingParamTable.Px4SitlModelName}]", EditorStyles.boldLabel);
+            GUILayout.Label($"Step 4.1: Airframe PX4 & GNC Parameter Table [{EditingParamTable.Category} / PX4: {EditingParamTable.Px4SitlModelName}]", EditorStyles.boldLabel);
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("기체 기본값 복원", GUILayout.Width(135)))
+            if (GUILayout.Button("Reset Defaults", GUILayout.Width(120)))
                 ResetTableForCategory(cfg.Category, cfg, db, host.SceneVehicle);
             EditorGUILayout.EndHorizontal();
 
             string tuningHint = cfg.Category switch
             {
-                VehicleAirframeCategory.FixedWing => "고정익 모드: FW_R_TC / FW_P_TC / TECS_SPDWEIGHT / 활주로 이륙 피치 및 순항 트림 파라미터가 활성화됩니다.",
-                VehicleAirframeCategory.HybridQuadPlaneVtol or VehicleAirframeCategory.TiltRotorVtol => "VTOL 모드: 멀티로터(MC_*) 호버 게인 + 고정익(FW_*) 순항 게인 + 천이 속도 파라미터가 함께 활성화됩니다.",
-                _ => "멀티로터 모드: MC_ROLL_P / MC_YAW_P / MPC_XY_P / MPC_Z_P / 호버 트림 스로틀 파라미터가 활성화됩니다."
+                VehicleAirframeCategory.FixedWing => "Fixed-Wing Mode: FW_R_TC / FW_P_TC / TECS_SPDWEIGHT / runway takeoff pitch & cruise trim parameters are active.",
+                VehicleAirframeCategory.HybridQuadPlaneVtol or VehicleAirframeCategory.TiltRotorVtol => "VTOL Mode: Multirotor (MC_*) hover gains + Fixed-Wing (FW_*) cruise gains + transition parameters are active.",
+                _ => "Multirotor Mode: MC_ROLL_P / MC_YAW_P / MPC_XY_P / MPC_Z_P / hover trim throttle parameters are active."
             };
             EditorGUILayout.HelpBox(tuningHint, MessageType.Info);
 
@@ -99,13 +99,13 @@ namespace FlightDynamics6DoF.Editor
 
             EditorGUILayout.BeginHorizontal();
             GUI.backgroundColor = new Color(0.55f, 1f, 0.65f);
-            if (GUILayout.Button("파라미터 적용 및 PX4 .params 반영", GUILayout.Height(28)))
+            if (GUILayout.Button("Apply & Export to PX4 .params", GUILayout.Height(28)))
             {
                 ApplyToVehicle(host.SceneVehicle);
                 ExportParamsToDockerConfig(host);
             }
             GUI.backgroundColor = Color.white;
-            if (GUILayout.Button("별도 .params 파일 내보내기", GUILayout.Height(28)))
+            if (GUILayout.Button("Export Separate .params File", GUILayout.Height(28)))
             {
                 string script = EditingParamTable.GeneratePx4ParameterScript(cfg, db);
                 string path = EditorUtility.SaveFilePanel("Save PX4 Parameter Table", Application.dataPath, $"unity_airframe_{EditingParamTable.Px4SitlModelName}.params", "params");
@@ -117,7 +117,7 @@ namespace FlightDynamics6DoF.Editor
             EditorGUILayout.Space(6);
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("Step 4.2: PX4 비행 명령 (pxh>) & ROS 2 Offboard", EditorStyles.boldLabel);
+            GUILayout.Label("Step 4.2: PX4 Flight Commands (pxh>) & ROS 2 Offboard", EditorStyles.boldLabel);
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Arm")) SendPxh(host.Infra, "commander arm");
             if (GUILayout.Button("Disarm")) SendPxh(host.Infra, "commander disarm");
@@ -161,14 +161,14 @@ namespace FlightDynamics6DoF.Editor
             if (vehicle != null && vehicle.Engine != null && vehicle.FlightController != null)
             {
                 EditorGUILayout.BeginHorizontal();
-                if (GUILayout.Button("내부 C# 폐루프 이륙 테스트 (No PX4)"))
+                if (GUILayout.Button("Internal C# Closed-Loop Takeoff Test (No PX4)"))
                 {
                     vehicle.UseInternalFlightController = true;
                     vehicle.SyncAirframeControlParameterTable(resetIfCategoryChanged: false);
                     var st = vehicle.Engine.State;
                     vehicle.FlightController.CommandTakeoff(st.PositionNed, st.AttitudeBodyToNed.ToEulerZyx().Z, 15.0);
                 }
-                if (GUILayout.Button("PX4 SITL 외부 제어 복귀"))
+                if (GUILayout.Button("Return to PX4 SITL Control"))
                 {
                     vehicle.FlightController.Disarm();
                     vehicle.UseInternalFlightController = false;

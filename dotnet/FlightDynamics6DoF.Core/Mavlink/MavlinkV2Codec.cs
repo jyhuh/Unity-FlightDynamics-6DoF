@@ -362,6 +362,7 @@ namespace FlightDynamics6DoF.Core.Mavlink
     public class MavlinkV2StreamParser
     {
         private readonly byte[] _buffer = new byte[280];
+        private readonly byte[] _rxPayload = new byte[255];
         private int _index = 0;
         private int _expectedLength = 0;
 
@@ -400,15 +401,14 @@ namespace FlightDynamics6DoF.Core.Mavlink
                 _index = 0;
                 if (receivedCrc == computedCrc)
                 {
-                    byte[] payloadCopy = new byte[payloadLen];
-                    Buffer.BlockCopy(_buffer, 10, payloadCopy, 0, payloadLen);
+                    Buffer.BlockCopy(_buffer, 10, _rxPayload, 0, payloadLen);
                     frame = new MavlinkV2Frame
                     {
                         Sequence = _buffer[4],
                         SystemId = _buffer[5],
                         ComponentId = _buffer[6],
                         MessageId = msgId,
-                        Payload = payloadCopy,
+                        Payload = _rxPayload,
                         PayloadLength = payloadLen
                     };
                     return true;

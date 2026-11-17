@@ -39,56 +39,56 @@ namespace FlightDynamics6DoF.Editor
         private void OnGUI()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("비행 로그 상한선 및 보관 정책 설정 (Log & Retention Settings)", EditorStyles.boldLabel);
+            GUILayout.Label("Flight Log Limits & Retention Policy", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "장시간 비행 또는 반복 시뮬레이션 시 메모리와 디스크(Assets/FlightLogs/)가 과도하게 커지는 것을 방지하기 위한 상한선을 설정합니다.",
+                "Configure memory and disk (Assets/FlightLogs/) limits to prevent unbounded growth during long or repeated flights.",
                 MessageType.Info);
             EditorGUILayout.EndVertical();
 
             EditorGUILayout.Space(6);
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("1. 메모리 버퍼 상한선 (In-Memory Ring Buffer)", EditorStyles.boldLabel);
+            GUILayout.Label("1. In-Memory Ring Buffer Limit", EditorStyles.boldLabel);
             _settings.MaxFramesInMemory = EditorGUILayout.IntSlider(
-                new GUIContent("최대 기록 프레임 수", "50 Hz 기준 30,000 프레임 = 약 10분 분량"),
+                new GUIContent("Max Recorded Frames", "At 50 Hz, 30,000 frames ≈ 10 minutes"),
                 _settings.MaxFramesInMemory, 1000, 200000);
             double approxMinutesAt50Hz = _settings.MaxFramesInMemory / (50.0 * 60.0);
-            EditorGUILayout.LabelField("예상 최대 메모리 보존 시간 (50 Hz 기준)", $"약 {approxMinutesAt50Hz:F1} 분 ({_settings.MaxFramesInMemory:N0} frames)");
+            EditorGUILayout.LabelField("Approx. Max Retention (at 50 Hz)", $"{approxMinutesAt50Hz:F1} min ({_settings.MaxFramesInMemory:N0} frames)");
             EditorGUILayout.EndVertical();
 
             EditorGUILayout.Space(6);
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("2. 디스크 보관 상한선 (Assets/FlightLogs/)", EditorStyles.boldLabel);
-            _settings.AutoPruneOldLogs = EditorGUILayout.ToggleLeft("상한 초과 시 오래된 로그 파일 자동 삭제 (Auto-Prune)", _settings.AutoPruneOldLogs);
+            GUILayout.Label("2. Disk Retention Limit (Assets/FlightLogs/)", EditorStyles.boldLabel);
+            _settings.AutoPruneOldLogs = EditorGUILayout.ToggleLeft("Auto-Prune Old Log Files When Over Limit", _settings.AutoPruneOldLogs);
             GUI.enabled = _settings.AutoPruneOldLogs;
-            _settings.MaxLogFilesOnDisk = EditorGUILayout.IntSlider("최대 보관 비행 세션 수 (CSV 기준)", _settings.MaxLogFilesOnDisk, 1, 500);
-            _settings.MaxTotalLogSizeMb = EditorGUILayout.Slider("최대 총 로그 용량 [MB]", _settings.MaxTotalLogSizeMb, 5f, 4096f);
+            _settings.MaxLogFilesOnDisk = EditorGUILayout.IntSlider("Max Retained Sessions (CSV)", _settings.MaxLogFilesOnDisk, 1, 500);
+            _settings.MaxTotalLogSizeMb = EditorGUILayout.Slider("Max Total Log Size [MB]", _settings.MaxTotalLogSizeMb, 5f, 4096f);
             GUI.enabled = true;
 
             string logDir = FlightLogRetentionSettings.GetDefaultLogDirectory();
             var (csvCount, totalFiles, totalMb) = FlightLogRetentionSettings.MeasureDirectoryUsage(logDir);
             EditorGUILayout.Space(4);
-            EditorGUILayout.LabelField("현재 Assets/FlightLogs/ 사용량", $"{csvCount}개 세션 (총 {totalFiles}개 파일) / {totalMb:F2} MB");
+            EditorGUILayout.LabelField("Current Assets/FlightLogs/ Usage", $"{csvCount} sessions ({totalFiles} files total) / {totalMb:F2} MB");
             EditorGUILayout.EndVertical();
 
             EditorGUILayout.Space(8);
 
             EditorGUILayout.BeginHorizontal();
             GUI.backgroundColor = new Color(0.55f, 0.95f, 0.65f);
-            if (GUILayout.Button("설정 저장 및 상한 즉시 적용", GUILayout.Height(30)))
+            if (GUILayout.Button("Save & Apply Policy Now", GUILayout.Height(30)))
             {
                 _settings.Save();
                 int pruned = _settings.ApplyRetentionPolicy(logDir);
                 ApplyMaxFramesToSceneVehicle(_settings.MaxFramesInMemory);
                 AssetDatabase.Refresh();
                 _statusMessage = pruned > 0
-                    ? $"설정을 저장하고 오래된 {pruned}개 세션을 정리했습니다."
-                    : "설정을 저장하고 상한선 정책을 적용했습니다.";
+                    ? $"Settings saved; pruned {pruned} old session(s)."
+                    : "Settings saved and retention policy applied.";
             }
             GUI.backgroundColor = Color.white;
 
-            if (GUILayout.Button("기본값 복원", GUILayout.Width(100), GUILayout.Height(30)))
+            if (GUILayout.Button("Reset Defaults", GUILayout.Width(110), GUILayout.Height(30)))
             {
                 _settings = new FlightLogRetentionSettings
                 {
@@ -98,20 +98,20 @@ namespace FlightDynamics6DoF.Editor
                     AutoPruneOldLogs = FlightLogRetentionSettings.DefaultAutoPruneOldLogs
                 };
                 _settings.Save();
-                _statusMessage = "기본 설정값으로 복원했습니다.";
+                _statusMessage = "Restored default retention settings.";
             }
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("로그 폴더 열기", GUILayout.Height(24)))
+            if (GUILayout.Button("Open Log Folder", GUILayout.Height(24)))
             {
                 Directory.CreateDirectory(logDir);
                 EditorUtility.RevealInFinder(logDir);
             }
             GUI.backgroundColor = new Color(1f, 0.6f, 0.6f);
-            if (GUILayout.Button("모든 비행 로그 비우기", GUILayout.Height(24)))
+            if (GUILayout.Button("Clear All Flight Logs", GUILayout.Height(24)))
             {
-                if (EditorUtility.DisplayDialog("비행 로그 전체 삭제", "Assets/FlightLogs/ 폴더의 모든 CSV 및 HTML 리포트를 삭제하시겠습니까?", "삭제", "취소"))
+                if (EditorUtility.DisplayDialog("Delete All Flight Logs", "Delete all CSV and HTML reports in Assets/FlightLogs/?", "Delete", "Cancel"))
                 {
                     if (Directory.Exists(logDir))
                     {
@@ -121,7 +121,7 @@ namespace FlightDynamics6DoF.Editor
                         }
                         AssetDatabase.Refresh();
                     }
-                    _statusMessage = "Assets/FlightLogs/의 모든 로그를 삭제했습니다.";
+                    _statusMessage = "Deleted all logs in Assets/FlightLogs/.";
                 }
             }
             GUI.backgroundColor = Color.white;

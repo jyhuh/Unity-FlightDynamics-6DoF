@@ -33,14 +33,16 @@ namespace FlightDynamics6DoF.Editor
         private readonly SimulationEnvironmentPanel _simPanel = new SimulationEnvironmentPanel();
         private readonly Px4TuningPanel _tuningPanel = new Px4TuningPanel();
         private readonly TelemetryLogPanel _telemetryPanel = new TelemetryLogPanel();
+        private readonly Ros2Nav2Panel _ros2Panel = new Ros2Nav2Panel();
 
         private static readonly string[] StepTitles = new[]
         {
-            "1. 공력/설계",
-            "2. 인프라",
-            "3. 시뮬레이션 환경",
-            "4. PX4 튜닝",
-            "5. 계측/로그"
+            "1. Aero/Design",
+            "2. Infra",
+            "3. Environment",
+            "4. PX4 Tuning",
+            "5. Telemetry",
+            "6. ROS2/Nav2"
         };
 
         [MenuItem("Tools/FlightDynamics 6-DOF/Unified 5-Step Engineering Workbench", false, 10)]
@@ -73,6 +75,7 @@ namespace FlightDynamics6DoF.Editor
 
         private void OnDisable()
         {
+            _ros2Panel.StopNav2();
             EditorApplication.update -= HandleEditorUpdate;
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
         }
@@ -155,6 +158,7 @@ namespace FlightDynamics6DoF.Editor
                 case 2: _simPanel.Draw(this); break;
                 case 3: _tuningPanel.Draw(this); break;
                 case 4: _telemetryPanel.Draw(this); break;
+                case 5: _ros2Panel.Draw(this); break;
             }
             EditorGUILayout.EndScrollView();
 
@@ -165,26 +169,26 @@ namespace FlightDynamics6DoF.Editor
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("FlightDynamics 6-DOF: Unified 5-Step SITL Workbench", EditorStyles.boldLabel);
+            GUILayout.Label("FlightDynamics 6-DOF: Unified 6-Step SITL Workbench", EditorStyles.boldLabel);
             GUILayout.FlexibleSpace();
 
             if (!EditorApplication.isPlaying)
             {
                 GUI.backgroundColor = new Color(0.45f, 0.95f, 0.55f);
-                if (GUILayout.Button("▶ 시뮬레이션 시작", GUILayout.Width(135), GUILayout.Height(22)))
+                if (GUILayout.Button("▶ Start Sim", GUILayout.Width(120), GUILayout.Height(22)))
                     StartSimulation();
             }
             else
             {
                 GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
-                if (GUILayout.Button("■ 시뮬레이션 종료", GUILayout.Width(135), GUILayout.Height(22)))
+                if (GUILayout.Button("■ Stop Sim", GUILayout.Width(120), GUILayout.Height(22)))
                     StopSimulation();
             }
             GUI.backgroundColor = Color.white;
 
-            Infra.AutoRefreshStatus = EditorGUILayout.ToggleLeft("자동상태갱신", Infra.AutoRefreshStatus, GUILayout.Width(88));
+            Infra.AutoRefreshStatus = EditorGUILayout.ToggleLeft("Auto Poll", Infra.AutoRefreshStatus, GUILayout.Width(82));
             GUI.enabled = !Infra.IsQueryingStatus;
-            if (GUILayout.Button(Infra.IsQueryingStatus ? "확인중..." : "갱신하기", GUILayout.Width(68), GUILayout.Height(22)))
+            if (GUILayout.Button(Infra.IsQueryingStatus ? "Polling..." : "Refresh", GUILayout.Width(72), GUILayout.Height(22)))
                 Infra.TriggerStatusQuery(EditorApplication.timeSinceStartup);
             GUI.enabled = true;
             EditorGUILayout.EndHorizontal();
@@ -202,7 +206,7 @@ namespace FlightDynamics6DoF.Editor
 
             var activeLogger = _telemetryPanel.GetActiveLogger(SceneVehicle);
             string simState = EditorApplication.isPlaying ? $"PLAY ({activeLogger.Frames.Count}f)" : $"IDLE ({activeLogger.Frames.Count}f)";
-            DrawCompactBadge("시뮬레이션", simState, EditorApplication.isPlaying ? new Color(0.3f, 0.85f, 1f) : Color.gray);
+            DrawCompactBadge("Simulation", simState, EditorApplication.isPlaying ? new Color(0.3f, 0.85f, 1f) : Color.gray);
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
@@ -230,16 +234,16 @@ namespace FlightDynamics6DoF.Editor
         {
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
             GUI.enabled = _selectedTab > 0;
-            if (GUILayout.Button("<< 이전 단계", GUILayout.Width(130), GUILayout.Height(24)))
+            if (GUILayout.Button("<< Prev Step", GUILayout.Width(130), GUILayout.Height(24)))
                 _selectedTab--;
             GUI.enabled = true;
 
             GUILayout.FlexibleSpace();
-            GUILayout.Label($"현재 단계: {StepTitles[_selectedTab]}", EditorStyles.miniBoldLabel);
+            GUILayout.Label($"Current Step: {StepTitles[_selectedTab]}", EditorStyles.miniBoldLabel);
             GUILayout.FlexibleSpace();
 
             GUI.enabled = _selectedTab < StepTitles.Length - 1;
-            if (GUILayout.Button("다음 단계 >>", GUILayout.Width(130), GUILayout.Height(24)))
+            if (GUILayout.Button("Next Step >>", GUILayout.Width(130), GUILayout.Height(24)))
                 _selectedTab++;
             GUI.enabled = true;
             EditorGUILayout.EndHorizontal();
@@ -297,7 +301,7 @@ namespace FlightDynamics6DoF.Editor
 
         internal string RebakeActiveConfig(AircraftConfigSpec cfg)
         {
-            string targetDesc = "오프라인 프리셋 캐시";
+            string targetDesc = "Offline Preset Cache";
             if (TargetProfile != null)
             {
                 Undo.RecordObject(TargetProfile, "Modify Aircraft Spec");

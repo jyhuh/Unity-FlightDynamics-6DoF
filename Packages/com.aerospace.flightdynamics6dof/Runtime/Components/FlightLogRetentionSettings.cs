@@ -138,7 +138,7 @@ namespace FlightDynamics6DoF.Unity
                 if (File.Exists(csvPath)) File.Delete(csvPath);
                 if (File.Exists(csvPath + ".meta")) File.Delete(csvPath + ".meta");
 
-                string? dir = Path.GetDirectoryName(csvPath);
+                string dir = Path.GetDirectoryName(csvPath);
                 string baseName = Path.GetFileNameWithoutExtension(csvPath);
                 if (!string.IsNullOrEmpty(dir))
                 {

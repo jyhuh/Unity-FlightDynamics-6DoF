@@ -20,6 +20,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-rosdep \
     iproute2 \
     iputils-ping \
+    ros-humble-navigation2 \
+    ros-humble-nav2-bringup \
+    ros-humble-rviz2 \
+    ros-humble-tf2-ros \
+    xvfb \
+    fluxbox \
+    x11vnc \
+    novnc \
+    websockify \
+    python3-numpy \
     && rm -rf /var/lib/apt/lists/*
 
 # 1. Build eProsima Micro-XRCE-DDS-Agent (Apache 2.0) into isolated /opt/uxrce prefix
@@ -42,8 +52,12 @@ RUN mkdir -p /ros2_ws/src && \
     bash -c "source /opt/ros/humble/setup.bash && colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
 
 COPY unity_px4_offboard_node.py /ros2_ws/unity_px4_offboard_node.py
+COPY unity_nav2_px4_bridge.py /ros2_ws/unity_nav2_px4_bridge.py
+COPY nav2_drone_params.yaml /ros2_ws/nav2_drone_params.yaml
+COPY nav2_drone.launch.py /ros2_ws/nav2_drone.launch.py
+COPY drone_nav2.rviz /ros2_ws/drone_nav2.rviz
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /ros2_ws/unity_px4_offboard_node.py /usr/local/bin/entrypoint.sh && \
+RUN chmod +x /ros2_ws/unity_px4_offboard_node.py /ros2_ws/unity_nav2_px4_bridge.py /usr/local/bin/entrypoint.sh && \
     echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
     echo "source /ros2_ws/install/setup.bash" >> /root/.bashrc
 

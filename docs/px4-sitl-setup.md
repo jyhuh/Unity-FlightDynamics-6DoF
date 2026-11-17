@@ -83,22 +83,27 @@ Manage the SITL stack from your terminal:
 # Send interactive command to PX4 NuttX shell (pxh)
 ./scripts/px4-sitl.sh pxh commander takeoff
 ./scripts/px4-sitl.sh pxh commander land
+
+# Launch ROS 2 Nav2 + RViz2 (noVNC at http://localhost:6080/vnc.html)
+./scripts/px4-sitl.sh ros2-nav2
 ```
 
 ---
 
 ## 4. Unity Editor Workbench Controls
 
-You can control all container, PX4, and simulation actions directly inside the Unity Editor without opening a terminal:
+You can control all container, PX4, ROS 2/Nav2, and simulation actions directly inside the Unity Editor without opening a terminal:
 
-1. Open **`Tools > FlightDynamics 6-DOF > Unified 5-Step Engineering Workbench`** (`FlightDynamicsEngineeringWizard`).
-2. Check the live status strip at the top (`VM`, `containerd`, `unity-px4-sitl`, `unity-ros2-dds`, and `시뮬레이션`), updated asynchronously by `SitlInfraController`.
-3. In **Step 2 (`2. 인프라`)**:
-   - **`▶ 인프라 전체 시작 (<model>)`**: Starts the Colima/Apple container runtime, `unity-ros2-dds`, and `unity-px4-sitl` with the selected airframe (`iris`, `plane`, or `standard_vtol`).
-   - **`■ 인프라 전체 중지 (컨테이너 정지)`**: Stops PX4/ROS 2 containers while keeping the VM warm for rapid restarts.
-   - **Advanced Foldout**: Individual PX4/ROS 2 start/stop, `rootfs_*` cache reset, `vm-status`/`vm-repair`/`vm-start`/`vm-stop`, and live console log viewer.
-4. In **Step 4 (`4. PX4 튜닝`)**:
+1. Open **`Tools > FlightDynamics 6-DOF > Unified 5-Step Engineering Workbench`** (`FlightDynamicsEngineeringWizard`, 6-tab UI).
+2. Check the live status strip at the top (`VM`, `containerd`, `unity-px4-sitl`, `unity-ros2-dds`, and `Simulation`), updated asynchronously by `SitlInfraController`.
+3. In **Step 2 (`2. Infra`)**:
+   - **`▶ Start All Infra (<model>)`**: Starts the Colima/Apple container runtime, `unity-ros2-dds`, and `unity-px4-sitl` with the selected airframe (`iris`, `plane`, or `standard_vtol`).
+   - **`■ Stop All (Shutdown VM)`**: Stops PX4/ROS 2 containers and shuts down the Colima VM (`vm-stop`).
+   - **Advanced Foldout**: Individual PX4/ROS 2 start/stop, `Stop Containers Only (down)`, `rootfs_*` cache reset, `Check VM/containerd`, `Repair containerd`, `Start Colima VM`, and `View Logs in Terminal`.
+4. In **Step 4 (`4. PX4 Tuning`)**:
    - **`pxh>` Input Field & Quick Buttons**: Send `commander arm`, `takeoff`, `land`, `vtol_transition`, or custom NuttX shell commands.
+5. In **Step 6 (`6. ROS2/Nav2`)**:
+   - Configure `Ros2LidarAndObstacleCourse` (2D Raycast LiDAR + test obstacles), start/stop **Nav2 + RViz2**, open **`http://localhost:6080/vnc.html`**, or run the built-in circular Offboard node.
 
 ---
 
