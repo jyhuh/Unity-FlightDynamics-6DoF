@@ -140,6 +140,37 @@ namespace FlightDynamics6DoF.Core.Dynamics
             }
         }
 
+        private bool _hasExternalSetpoint;
+        private double _extTargetPosN, _extTargetPosE, _extTargetAltAgl;
+        private double _extTargetAirspeedMps;
+        private double _extTargetRollDeg, _extTargetPitchDeg, _extTargetYawDeg;
+
+        public bool HasExternalTargetSetpoint => _hasExternalSetpoint;
+
+        public void SetExternalTargetSetpoint(
+            double targetPosN,
+            double targetPosE,
+            double targetAltAgl,
+            double targetAirspeedMps,
+            double targetRollDeg,
+            double targetPitchDeg,
+            double targetYawDeg)
+        {
+            _hasExternalSetpoint = true;
+            _extTargetPosN = targetPosN;
+            _extTargetPosE = targetPosE;
+            _extTargetAltAgl = targetAltAgl;
+            _extTargetAirspeedMps = targetAirspeedMps;
+            _extTargetRollDeg = targetRollDeg;
+            _extTargetPitchDeg = targetPitchDeg;
+            _extTargetYawDeg = targetYawDeg;
+        }
+
+        public void ClearExternalTargetSetpoint()
+        {
+            _hasExternalSetpoint = false;
+        }
+
         public void RecordFrame(TelemetryLogFrame frame)
         {
             if (MaxFrames > 0 && _fdFrames.Count >= MaxFrames)
@@ -165,9 +196,11 @@ namespace FlightDynamics6DoF.Core.Dynamics
             }
 
             Vec3d eulerDeg = st.AttitudeBodyToNed.ToEulerZyx() * FrameConverter.Rad2Deg;
-            Vec3d tgtEulerDeg = controller != null
-                ? controller.TargetAttitudeBodyToNed.ToEulerZyx() * FrameConverter.Rad2Deg
-                : Vec3d.Zero;
+            Vec3d tgtEulerDeg = _hasExternalSetpoint
+                ? new Vec3d(_extTargetRollDeg, _extTargetPitchDeg, _extTargetYawDeg)
+                : (controller != null
+                    ? controller.TargetAttitudeBodyToNed.ToEulerZyx() * FrameConverter.Rad2Deg
+                    : Vec3d.Zero);
 
             double totalThrustN = 0.0;
             if (st.RotorThrustNewtons != null)
@@ -177,8 +210,15 @@ namespace FlightDynamics6DoF.Core.Dynamics
             }
 
             double[] acts = st.ActuatorControlsNormalized;
-            double tgtAlt = controller != null ? System.Math.Max(0.0, -controller.TargetPositionNed.Z) : 0.0;
-            double tgtAirspeed = controller != null ? controller.ParameterTable.AirspeedTrimMps : engine.Config.DesignCruiseSpeedMps;
+            double tgtPosN = _hasExternalSetpoint ? _extTargetPosN : (controller != null ? controller.TargetPositionNed.X : 0.0);
+            double tgtPosE = _hasExternalSetpoint ? _extTargetPosE : (controller != null ? controller.TargetPositionNed.Y : 0.0);
+            double tgtAlt = _hasExternalSetpoint ? _extTargetAltAgl : (controller != null ? System.Math.Max(0.0, -controller.TargetPositionNed.Z) : 0.0);
+            double tgtAirspeed = _hasExternalSetpoint && _extTargetAirspeedMps > 0.0
+                ? _extTargetAirspeedMps
+                : (controller != null ? controller.ParameterTable.AirspeedTrimMps : engine.Config.DesignCruiseSpeedMps);
+            double tgtYaw = _hasExternalSetpoint
+                ? _extTargetYawDeg
+                : (controller != null ? controller.TargetYawRad * FrameConverter.Rad2Deg : 0.0);
 
             var frame = new TelemetryLogFrame
             {
@@ -191,8 +231,8 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 PosE = st.PositionNed.Y,
                 PosD = st.PositionNed.Z,
                 AltitudeAgl = st.AltitudeAglMeters,
-                TargetPosN = controller != null ? controller.TargetPositionNed.X : 0.0,
-                TargetPosE = controller != null ? controller.TargetPositionNed.Y : 0.0,
+                TargetPosN = tgtPosN,
+                TargetPosE = tgtPosE,
                 TargetAltAgl = tgtAlt,
                 VelN = st.VelocityNed.X,
                 VelE = st.VelocityNed.Y,
@@ -206,7 +246,7 @@ namespace FlightDynamics6DoF.Core.Dynamics
                 YawDeg = eulerDeg.Z,
                 TargetRollDeg = tgtEulerDeg.X,
                 TargetPitchDeg = tgtEulerDeg.Y,
-                TargetYawDeg = controller != null ? controller.TargetYawRad * FrameConverter.Rad2Deg : 0.0,
+                TargetYawDeg = tgtYaw,
                 P_Degps = st.AngularVelocityBodyFrd.X * FrameConverter.Rad2Deg,
                 Q_Degps = st.AngularVelocityBodyFrd.Y * FrameConverter.Rad2Deg,
                 R_Degps = st.AngularVelocityBodyFrd.Z * FrameConverter.Rad2Deg,

@@ -52,17 +52,22 @@ namespace FlightDynamics6DoF.Unity
         [Range(2, 50)]
         public int LockstepTimeoutMs = 15;
 
+        [Tooltip("Optional UDP port receiving MAVLink v2 ATTITUDE_TARGET (#83) / POSITION_TARGET_LOCAL_NED (#85) setpoints from ROS 2 / PX4 bridge.")]
+        public int SetpointUdpPort = 8891;
+
         private readonly MavlinkSimulationBridge _bridge = new MavlinkSimulationBridge();
         private readonly ConcurrentQueue<byte[]> _rxQueue = new ConcurrentQueue<byte[]>();
         private readonly AutoResetEvent _rxPacketSignal = new AutoResetEvent(false);
         private readonly byte[] _udpSendBuffer = new byte[512];
 
         private UdpClient? _udpClient;
+        private UdpClient? _setpointUdpClient;
         private IPEndPoint? _udpRemoteEndPoint;
         private TcpListener? _tcpServer;
         private TcpClient? _tcpClient;
         private NetworkStream? _tcpStream;
         private Thread? _ioThread;
+        private Thread? _setpointThread;
         private volatile bool _running;
 
         public MavlinkSimulationBridge Bridge => _bridge;
@@ -123,6 +128,14 @@ namespace FlightDynamics6DoF.Unity
                     _ioThread = new Thread(UdpReceiveLoop) { IsBackground = true, Name = "FD6DoF_MAVLink_UDP" };
                     _ioThread.Start();
                 }
+
+                if (SetpointUdpPort > 0)
+                {
+                    _setpointUdpClient = new UdpClient(SetpointUdpPort);
+                    _setpointUdpClient.Client.ReceiveTimeout = 50;
+                    _setpointThread = new Thread(SetpointUdpLoop) { IsBackground = true, Name = "FD6DoF_PX4_Setpoint_UDP" };
+                    _setpointThread.Start();
+                }
             }
             catch (Exception ex)
             {
@@ -136,11 +149,13 @@ namespace FlightDynamics6DoF.Unity
             IsConnected = false;
 
             try { _udpClient?.Close(); } catch { }
+            try { _setpointUdpClient?.Close(); } catch { }
             try { _tcpStream?.Close(); } catch { }
             try { _tcpClient?.Close(); } catch { }
             try { _tcpServer?.Stop(); } catch { }
 
             _udpClient = null;
+            _setpointUdpClient = null;
             _tcpStream = null;
             _tcpClient = null;
             _tcpServer = null;
@@ -199,6 +214,37 @@ namespace FlightDynamics6DoF.Unity
             while (_rxQueue.TryDequeue(out byte[]? rawBytes))
             {
                 _bridge.ProcessIncomingBytes(rawBytes, Vehicle.Engine, Vehicle.FlightController, SendRawBytes);
+            }
+
+            if (!Vehicle.UseInternalFlightController && _bridge.HasExternalTargetSetpoint)
+            {
+                _bridge.ApplyExternalSetpointsToLogger(Vehicle.TelemetryLogger);
+            }
+            else if (Vehicle.UseInternalFlightController && Vehicle.TelemetryLogger.HasExternalTargetSetpoint)
+            {
+                Vehicle.TelemetryLogger.ClearExternalTargetSetpoint();
+            }
+        }
+
+        private void SetpointUdpLoop()
+        {
+            var ep = new IPEndPoint(IPAddress.Any, 0);
+            while (_running && _setpointUdpClient != null)
+            {
+                try
+                {
+                    byte[] data = _setpointUdpClient.Receive(ref ep);
+                    if (data.Length > 0)
+                        _rxQueue.Enqueue(data);
+                }
+                catch (SocketException)
+                {
+                }
+                catch
+                {
+                    if (!_running) break;
+                    Thread.Sleep(5);
+                }
             }
         }
 

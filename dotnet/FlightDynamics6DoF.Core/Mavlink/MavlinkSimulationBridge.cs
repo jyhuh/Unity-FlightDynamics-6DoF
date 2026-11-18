@@ -48,6 +48,28 @@ namespace FlightDynamics6DoF.Core.Mavlink
         public long TotalFramesReceived { get; private set; }
         public long TotalHilActuatorFramesReceived { get; private set; }
 
+        public bool HasExternalTargetSetpoint { get; private set; }
+        public double ExternalTargetPosN { get; private set; }
+        public double ExternalTargetPosE { get; private set; }
+        public double ExternalTargetAltAgl { get; private set; }
+        public double ExternalTargetAirspeedMps { get; private set; }
+        public double ExternalTargetRollDeg { get; private set; }
+        public double ExternalTargetPitchDeg { get; private set; }
+        public double ExternalTargetYawDeg { get; private set; }
+
+        public void ApplyExternalSetpointsToLogger(FlightTelemetryLogger logger)
+        {
+            if (logger == null || !HasExternalTargetSetpoint) return;
+            logger.SetExternalTargetSetpoint(
+                ExternalTargetPosN,
+                ExternalTargetPosE,
+                ExternalTargetAltAgl,
+                ExternalTargetAirspeedMps,
+                ExternalTargetRollDeg,
+                ExternalTargetPitchDeg,
+                ExternalTargetYawDeg);
+        }
+
         /// <summary>
         /// Processes incoming raw network bytes (from UDP or TCP socket) and updates either the SITL actuator controls
         /// or the built-in <see cref="CascadedFlightController"/> state, writing any immediate reply packets to <paramref name="sendCallback"/>.
@@ -162,6 +184,44 @@ namespace FlightDynamics6DoF.Core.Mavlink
                     LastReceivedHilTimestampUsec = timeUsec;
                     ReceivedActuatorControlsThisStep = true;
                     TotalHilActuatorFramesReceived++;
+                    break;
+                }
+
+                case MavlinkMessageIds.AttitudeTarget:
+                {
+                    MavlinkV2Codec.UnpackAttitudeTarget(
+                        frame.Payload.AsSpan(0, frame.PayloadLength),
+                        out Quatd qTarget, out _, out byte typeMask);
+                    if ((typeMask & 0x80) == 0) // bit7 (128) = ATTITUDE_TARGET_TYPEMASK_ATTITUDE_IGNORE
+                    {
+                        Vec3d eulerDeg = qTarget.ToEulerZyx() * FrameConverter.Rad2Deg;
+                        ExternalTargetRollDeg = eulerDeg.X;
+                        ExternalTargetPitchDeg = eulerDeg.Y;
+                        ExternalTargetYawDeg = eulerDeg.Z;
+                        HasExternalTargetSetpoint = true;
+                    }
+                    break;
+                }
+
+                case MavlinkMessageIds.PositionTargetLocalNed:
+                {
+                    MavlinkV2Codec.UnpackPositionTargetLocalNed(
+                        frame.Payload.AsSpan(0, frame.PayloadLength),
+                        out double posN, out double posE, out double posD,
+                        out double velN, out double velE, out double velD,
+                        out double yawRad, out ushort typeMask);
+
+                    if ((typeMask & 0x01) == 0 && !double.IsNaN(posN)) ExternalTargetPosN = posN;
+                    if ((typeMask & 0x02) == 0 && !double.IsNaN(posE)) ExternalTargetPosE = posE;
+                    if ((typeMask & 0x04) == 0 && !double.IsNaN(posD)) ExternalTargetAltAgl = System.Math.Max(0.0, -posD);
+                    if ((typeMask & 0x38) != 0x38 && !double.IsNaN(velN) && !double.IsNaN(velE) && !double.IsNaN(velD))
+                    {
+                        double spd = System.Math.Sqrt(velN * velN + velE * velE + velD * velD);
+                        if (spd > 0.01) ExternalTargetAirspeedMps = spd;
+                    }
+                    if ((typeMask & 0x0400) == 0 && !double.IsNaN(yawRad))
+                        ExternalTargetYawDeg = yawRad * FrameConverter.Rad2Deg;
+                    HasExternalTargetSetpoint = true;
                     break;
                 }
 
