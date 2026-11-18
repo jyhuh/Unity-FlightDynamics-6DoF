@@ -26,6 +26,8 @@ namespace FlightDynamics6DoF.Core.Mavlink
         public const uint VfrHud = 74;
         public const uint CommandLong = 76;
         public const uint CommandAck = 77;
+        public const uint AttitudeTarget = 83;
+        public const uint PositionTargetLocalNed = 85;
         public const uint HilActuatorControls = 93;
         public const uint HilSensor = 107;
         public const uint HilGps = 113;
@@ -70,6 +72,8 @@ namespace FlightDynamics6DoF.Core.Mavlink
             MavlinkMessageIds.VfrHud => 20,
             MavlinkMessageIds.CommandLong => 152,
             MavlinkMessageIds.CommandAck => 143,
+            MavlinkMessageIds.AttitudeTarget => 22,
+            MavlinkMessageIds.PositionTargetLocalNed => 140,
             MavlinkMessageIds.HilActuatorControls => 47,
             MavlinkMessageIds.HilSensor => 108,
             MavlinkMessageIds.HilGps => 124,
@@ -286,6 +290,50 @@ namespace FlightDynamics6DoF.Core.Mavlink
 
         public static void UnpackHilActuatorControls(ReadOnlySpan<byte> payload, Span<double> outControls16, out ulong timeUsec) =>
             UnpackHilActuatorControls(payload, outControls16, out timeUsec, out _);
+
+        public static void UnpackAttitudeTarget(
+            ReadOnlySpan<byte> payload,
+            out Quatd attitudeBodyToNed,
+            out float thrust,
+            out byte typeMask)
+        {
+            Span<byte> full = stackalloc byte[37];
+            full.Clear();
+            payload.Slice(0, System.Math.Min(payload.Length, 37)).CopyTo(full);
+
+            float qw = ReadSingle(full, 4);
+            float qx = ReadSingle(full, 8);
+            float qy = ReadSingle(full, 12);
+            float qz = ReadSingle(full, 16);
+            thrust = ReadSingle(full, 32);
+            typeMask = full[36];
+            attitudeBodyToNed = new Quatd(qw, qx, qy, qz).Normalized();
+        }
+
+        public static void UnpackPositionTargetLocalNed(
+            ReadOnlySpan<byte> payload,
+            out double posN,
+            out double posE,
+            out double posD,
+            out double velN,
+            out double velE,
+            out double velD,
+            out double yawRad,
+            out ushort typeMask)
+        {
+            Span<byte> full = stackalloc byte[51];
+            full.Clear();
+            payload.Slice(0, System.Math.Min(payload.Length, 51)).CopyTo(full);
+
+            posN = ReadSingle(full, 4);
+            posE = ReadSingle(full, 8);
+            posD = ReadSingle(full, 12);
+            velN = ReadSingle(full, 16);
+            velE = ReadSingle(full, 20);
+            velD = ReadSingle(full, 24);
+            yawRad = ReadSingle(full, 40);
+            typeMask = BinaryPrimitives.ReadUInt16LittleEndian(full.Slice(48, 2));
+        }
 
         public static void UnpackCommandLong(
             ReadOnlySpan<byte> payload,

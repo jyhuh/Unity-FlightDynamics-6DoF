@@ -27,7 +27,37 @@ from px4_msgs.msg import (
     VehicleLocalPosition,
     VehicleStatus,
 )
+try:
+    from px4_msgs.msg import VehicleAttitudeSetpoint
+except ImportError:
+    VehicleAttitudeSetpoint = None
 from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
+
+
+def _crc16_x25(data: bytes, crc_extra: int) -> int:
+    crc = 0xFFFF
+    for b in data + bytes((crc_extra,)):
+        tmp = b ^ (crc & 0xFF)
+        tmp ^= (tmp << 4) & 0xFF
+        crc = ((crc >> 8) ^ (tmp << 8) ^ (tmp << 3) ^ (tmp >> 4)) & 0xFFFF
+    return crc
+
+
+def _pack_mavlink_v2(msg_id: int, crc_extra: int, payload: bytes, seq: int) -> bytes:
+    header = struct.pack(
+        "<BBBBBBBBB",
+        0xFD,
+        len(payload),
+        0,
+        0,
+        seq & 0xFF,
+        1,
+        1,
+        msg_id & 0xFF,
+        (msg_id >> 8) & 0xFF,
+    ) + bytes(((msg_id >> 16) & 0xFF,))
+    crc = _crc16_x25(header[1:] + payload, crc_extra)
+    return header + payload + struct.pack("<H", crc)
 
 
 def resolve_unity_host() -> str:
@@ -50,9 +80,12 @@ class UnityNav2Px4Bridge(Node):
 
         self.declare_parameter("takeoff_altitude", 2.5)
         self.declare_parameter("unity_lidar_port", 8890)
+        self.declare_parameter("unity_setpoint_port", 8891)
         self.takeoff_alt = float(self.get_parameter("takeoff_altitude").value)
         self.unity_host = resolve_unity_host()
         self.unity_port = int(self.get_parameter("unity_lidar_port").value)
+        self.setpoint_port = int(self.get_parameter("unity_setpoint_port").value)
+        self._mav_seq = 0
 
         px4_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -74,6 +107,9 @@ class UnityNav2Px4Bridge(Node):
         # Subscribers
         self.create_subscription(VehicleLocalPosition, "/fmu/out/vehicle_local_position", self._on_local_pos, px4_qos)
         self.create_subscription(VehicleStatus, "/fmu/out/vehicle_status", self._on_status, px4_qos)
+        self.create_subscription(TrajectorySetpoint, "/fmu/in/trajectory_setpoint", self._on_traj_setpoint, px4_qos)
+        if VehicleAttitudeSetpoint is not None:
+            self.create_subscription(VehicleAttitudeSetpoint, "/fmu/out/vehicle_attitude_setpoint", self._on_att_setpoint, px4_qos)
         self.create_subscription(Twist, "/cmd_vel", self._on_cmd_vel, 10)
 
         # UDP socket for Unity 2D LiDAR
@@ -119,6 +155,45 @@ class UnityNav2Px4Bridge(Node):
 
     def _on_status(self, msg: VehicleStatus) -> None:
         self.vehicle_status = msg
+
+    def _send_setpoint_udp(self, pkt: bytes) -> None:
+        try:
+            self.udp.sendto(pkt, (self.unity_host, self.setpoint_port))
+        except OSError:
+            pass
+
+    def _on_att_setpoint(self, msg) -> None:
+        q = msg.q_d
+        thrust = float(msg.thrust_body[2]) if len(msg.thrust_body) >= 3 else 0.0
+        payload = struct.pack("<I4f3ffB", 0, float(q[0]), float(q[1]), float(q[2]), float(q[3]), 0.0, 0.0, 0.0, -thrust, 0)
+        self._mav_seq = (self._mav_seq + 1) & 0xFF
+        self._send_setpoint_udp(_pack_mavlink_v2(83, 22, payload, self._mav_seq))
+
+    def _on_traj_setpoint(self, msg: TrajectorySetpoint) -> None:
+        pos = msg.position
+        vel = msg.velocity
+        acc = msg.acceleration
+        type_mask = 0
+        if math.isnan(pos[0]): type_mask |= 0x01
+        if math.isnan(pos[1]): type_mask |= 0x02
+        if math.isnan(pos[2]): type_mask |= 0x04
+        if math.isnan(vel[0]): type_mask |= 0x08
+        if math.isnan(vel[1]): type_mask |= 0x10
+        if math.isnan(vel[2]): type_mask |= 0x20
+        if math.isnan(msg.yaw): type_mask |= 0x0400
+        if math.isnan(msg.yawspeed): type_mask |= 0x0800
+        payload = struct.pack(
+            "<I3f3f3f2fHB",
+            0,
+            float(pos[0]), float(pos[1]), float(pos[2]),
+            float(vel[0]), float(vel[1]), float(vel[2]),
+            float(acc[0]), float(acc[1]), float(acc[2]),
+            float(msg.yaw), float(msg.yawspeed),
+            type_mask,
+            1,  # MAV_FRAME_LOCAL_NED
+        )
+        self._mav_seq = (self._mav_seq + 1) & 0xFF
+        self._send_setpoint_udp(_pack_mavlink_v2(85, 140, payload, self._mav_seq))
 
     def _on_local_pos(self, msg: VehicleLocalPosition) -> None:
         self.local_pos = msg
