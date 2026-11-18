@@ -63,10 +63,11 @@ namespace FlightDynamics6DoF.Editor
                 return;
             }
 
+            var bounds = _viewport.SyncWithFrames(frames);
             foreach (var preset in TelemetryChannelRegistry.GetBuiltInPresets(frames[0].Category))
-                TelemetryChartRenderer.Draw(host, preset, frames, _viewport);
+                TelemetryChartRenderer.Draw(host, preset, frames, _viewport, bounds);
 
-            DrawCustomCharts(host, frames);
+            DrawCustomCharts(host, frames, bounds);
         }
 
         private static void DrawHeaderBar()
@@ -189,7 +190,10 @@ namespace FlightDynamics6DoF.Editor
                 MessageType.Info);
         }
 
-        private void DrawCustomCharts(EditorWindow host, IReadOnlyList<TelemetryLogFrame> frames)
+        private void DrawCustomCharts(
+            EditorWindow host,
+            IReadOnlyList<TelemetryLogFrame> frames,
+            (double tMin, double tMax, double minEnd, double tLast) bounds)
         {
             for (int c = 0; c < _customCharts.Count; c++)
             {
@@ -221,7 +225,7 @@ namespace FlightDynamics6DoF.Editor
                 if (cfg.ChannelIndices.Count > 0)
                 {
                     var def = cfg.ToDefinition(TelemetryChannelRegistry.Channels);
-                    TelemetryChartRenderer.Draw(host, def, frames, _viewport);
+                    TelemetryChartRenderer.Draw(host, def, frames, _viewport, bounds);
                 }
                 EditorGUILayout.EndVertical();
             }

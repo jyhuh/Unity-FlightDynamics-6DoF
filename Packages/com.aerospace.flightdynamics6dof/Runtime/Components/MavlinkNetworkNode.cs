@@ -220,6 +220,10 @@ namespace FlightDynamics6DoF.Unity
             {
                 _bridge.ApplyExternalSetpointsToLogger(Vehicle.TelemetryLogger);
             }
+            else if (Vehicle.UseInternalFlightController && Vehicle.TelemetryLogger.HasExternalTargetSetpoint)
+            {
+                Vehicle.TelemetryLogger.ClearExternalTargetSetpoint();
+            }
         }
 
         private void SetpointUdpLoop()

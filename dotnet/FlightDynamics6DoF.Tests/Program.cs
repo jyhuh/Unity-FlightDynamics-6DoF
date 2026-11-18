@@ -320,6 +320,43 @@ namespace FlightDynamics6DoF.Tests
             bridge.ProcessIncomingBytes(hilWire.Slice(0, hilLen), engine, controller);
             AssertTrue(bridge.ReceivedActuatorControlsThisStep, "Bridge decoded HIL_ACTUATOR_CONTROLS frame");
             AssertNear(engine.State.ActuatorControlsNormalized[0], 0.72, 1e-4, "Engine received SITL actuator control ch0");
+
+            // Verify MAVLink #83 ATTITUDE_TARGET and #85 POSITION_TARGET_LOCAL_NED setpoint decoding
+            Span<byte> attPayload = stackalloc byte[37];
+            attPayload.Clear();
+            Quatd qTarget = Quatd.FromEulerZyx(0.1, -0.05, 0.5); // roll, pitch, yaw rad
+            MavlinkV2Codec.WriteSingle(attPayload, 4, (float)qTarget.W);
+            MavlinkV2Codec.WriteSingle(attPayload, 8, (float)qTarget.X);
+            MavlinkV2Codec.WriteSingle(attPayload, 12, (float)qTarget.Y);
+            MavlinkV2Codec.WriteSingle(attPayload, 16, (float)qTarget.Z);
+            Span<byte> attWire = stackalloc byte[60];
+            int attLen = MavlinkV2Codec.EncodeFrame(MavlinkMessageIds.AttitudeTarget, 3, 1, 1, attPayload, attWire);
+            bridge.ProcessIncomingBytes(attWire.Slice(0, attLen), engine, controller);
+
+            Span<byte> posPayload = stackalloc byte[51];
+            posPayload.Clear();
+            MavlinkV2Codec.WriteSingle(posPayload, 4, 12.0f);   // N
+            MavlinkV2Codec.WriteSingle(posPayload, 8, -4.0f);   // E
+            MavlinkV2Codec.WriteSingle(posPayload, 12, -15.0f); // D => Alt AGL 15.0 m
+            MavlinkV2Codec.WriteSingle(posPayload, 40, float.NaN);
+            posPayload[48] = 0x00;
+            posPayload[49] = 0x04; // ignore yaw (0x0400) so AttitudeTarget yaw stays intact
+            Span<byte> posWire = stackalloc byte[80];
+            int posLen = MavlinkV2Codec.EncodeFrame(MavlinkMessageIds.PositionTargetLocalNed, 4, 1, 1, posPayload, posWire);
+            bridge.ProcessIncomingBytes(posWire.Slice(0, posLen), engine, controller);
+
+            AssertTrue(bridge.HasExternalTargetSetpoint, "Bridge latched external PX4 target setpoints");
+            var extLogger = new FlightTelemetryLogger();
+            bridge.ApplyExternalSetpointsToLogger(extLogger);
+            extLogger.StartRecording();
+            extLogger.RecordStep(engine, controller, forceSample: true);
+            AssertTrue(extLogger.Frames.Count == 1, "External setpoint frame recorded");
+            AssertNear(extLogger.Frames[0].TargetRollDeg, 0.1 * FrameConverter.Rad2Deg, 0.05, "External TargetRollDeg decoded");
+            AssertNear(extLogger.Frames[0].TargetPitchDeg, -0.05 * FrameConverter.Rad2Deg, 0.05, "External TargetPitchDeg decoded");
+            AssertNear(extLogger.Frames[0].TargetYawDeg, 0.5 * FrameConverter.Rad2Deg, 0.05, "External TargetYawDeg preserved when PosTarget ignores yaw");
+            AssertNear(extLogger.Frames[0].TargetAltAgl, 15.0, 1e-3, "External TargetAltAgl decoded");
+            extLogger.ClearExternalTargetSetpoint();
+            AssertTrue(!extLogger.HasExternalTargetSetpoint, "ClearExternalTargetSetpoint resets external latch");
         }
 
         private static void TestAirframeParameterTableAndFixedWingClosedLoopStability()

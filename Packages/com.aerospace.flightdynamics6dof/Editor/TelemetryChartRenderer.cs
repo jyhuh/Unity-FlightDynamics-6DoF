@@ -16,7 +16,8 @@ namespace FlightDynamics6DoF.Editor
             EditorWindow host,
             TelemetryChartDefinition chart,
             IReadOnlyList<TelemetryLogFrame> frames,
-            TelemetryTimeViewport viewport)
+            TelemetryTimeViewport viewport,
+            (double tMin, double tMax, double minEnd, double tLast) bounds)
         {
             if (chart.Series.Count == 0 || frames.Count < 2)
                 return;
@@ -26,7 +27,7 @@ namespace FlightDynamics6DoF.Editor
 
             Rect plotRect = GUILayoutUtility.GetRect(100, 130, GUILayout.ExpandWidth(true));
             Event ev = Event.current;
-            var (tMin, tMax, minEnd, tLast) = viewport.SyncWithFrames(frames);
+            var (tMin, tMax, minEnd, tLast) = bounds;
             viewport.HandlePlotInput(plotRect, ev, host, tMin, tMax, minEnd, tLast);
 
             if (ev.type == EventType.Repaint || plotRect.Contains(ev.mousePosition))
