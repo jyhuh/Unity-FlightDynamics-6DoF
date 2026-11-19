@@ -77,7 +77,7 @@ PX4 uORB topics are exposed under the `/fmu/` namespace.
 ## 3. Offboard Control Implementation (`unity_px4_offboard_node.py`)
 
 A reference implementation for autonomous arming, takeoff, and trajectory tracking is located at:
-[docker/ros2/unity_px4_offboard_node.py](file:///Users/byabya/UnityDrone/docker/ros2/unity_px4_offboard_node.py)
+[docker/ros2/unity_px4_offboard_node.py](../docker/ros2/unity_px4_offboard_node.py)
 
 ### Step 1: Setting up the Heartbeat Loop
 PX4 will refuse to enter or maintain **Offboard Mode** unless it receives an active heartbeat stream:
@@ -166,9 +166,9 @@ python3 /ros2_ws/unity_px4_offboard_node.py --altitude 15.0 --radius 12.0
 
 FlightDynamics 6-DOF includes a complete single-drone **ROS 2 Humble + Nav2 + RViz2 (noVNC)** obstacle avoidance pipeline:
 
-- **Unity 2D Raycast LiDAR**: [Ros2LidarAndObstacleCourse.cs](file:///Users/byabya/UnityDrone/Packages/com.aerospace.flightdynamics6dof/Runtime/Components/Ros2LidarAndObstacleCourse.cs) streams horizontal 360° laser scans (180 rays, 10 Hz, 0.4–20 m) over UDP `:8890` and optionally spawns a 6 m-tall test obstacle course (`UnityNav2ObstacleCourse`).
-- **Unified Nav2-PX4 Bridge**: [unity_nav2_px4_bridge.py](file:///Users/byabya/UnityDrone/docker/ros2/unity_nav2_px4_bridge.py) publishes `/scan`, `/odom`, and the synchronized `map -> odom -> base_link -> laser_frame` TF tree, arms PX4 in Offboard mode to hover at 2.5 m, and translates Nav2 `/cmd_vel` (FLU) into hybrid Z-hold + XY-velocity `TrajectorySetpoint` commands.
-- **Nav2 & RViz2 Configuration**: [nav2_drone_params.yaml](file:///Users/byabya/UnityDrone/docker/ros2/nav2_drone_params.yaml) configures rolling-window Global/Local Costmaps (`max_obstacle_height: 10.0`, `inf_is_valid: true`) with `NavfnPlanner` and `DWBLocalPlanner`.
+- **Unity 2D Raycast LiDAR**: [Ros2LidarAndObstacleCourse.cs](../Packages/com.aerospace.flightdynamics6dof/Runtime/Components/Ros2LidarAndObstacleCourse.cs) streams horizontal 360° laser scans (180 rays, 10 Hz, 0.4–20 m) over UDP `:8890` and optionally spawns a 6 m-tall test obstacle course (`UnityNav2ObstacleCourse`).
+- **Unified Nav2-PX4 Bridge**: [unity_nav2_px4_bridge.py](../docker/ros2/unity_nav2_px4_bridge.py) publishes `/scan`, `/odom`, and the synchronized `map -> odom -> base_link -> laser_frame` TF tree, arms PX4 in Offboard mode to hover at 2.5 m, and translates Nav2 `/cmd_vel` (FLU) into hybrid Z-hold + XY-velocity `TrajectorySetpoint` commands.
+- **Nav2 & RViz2 Configuration**: [nav2_drone_params.yaml](../docker/ros2/nav2_drone_params.yaml) configures rolling-window Global/Local Costmaps (`max_obstacle_height: 10.0`, `inf_is_valid: true`) with `NavfnPlanner` and `DWBLocalPlanner`.
 
 ### Quick Launch
 1. Start the stack (`./scripts/px4-sitl.sh up iris` or Workbench **Step 2: `2. Infra`**) and enter **Unity Play Mode**.

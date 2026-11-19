@@ -1,11 +1,11 @@
 # FlightDynamics 6-DOF: Nonlinear UAV & eVTOL Flight Dynamics Suite for Unity 6
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Unity 6 Ready](https://img.shields.io/badge/Unity-6000.3.11f1%20(Unity%206)-black.svg?logo=unity)](https://unity.com/)
+[![Unity 6 Ready](https://img.shields.io/badge/Unity-6000.3.11f1%20%28Unity%206%29-black.svg?logo=unity)](https://unity.com/)
 [![Runtime: .NET Standard 2.1](https://img.shields.io/badge/.NET%20Standard-2.1-512BD4.svg?logo=dotnet)](https://dotnet.microsoft.com/)
 [![PX4 Autopilot SITL](https://img.shields.io/badge/PX4-v1.15%20SITL-orange.svg?logo=drone)](https://px4.io/)
 [![ROS 2](https://img.shields.io/badge/ROS%202-Humble%20Hawksbill-22314E.svg?logo=ros)](https://www.ros.org/)
-[![Automated Assertions](https://img.shields.io/badge/Tests-196%20Passing-brightgreen.svg)](dotnet/FlightDynamics6DoF.Tests/)
+[![Automated Assertions](https://img.shields.io/badge/Tests-235%20Passing-brightgreen.svg)](dotnet/FlightDynamics6DoF.Tests/)
 
 **FlightDynamics 6-DOF** is a high-fidelity aerospace flight dynamics and simulation engineering suite for Unity. It combines offline aerodynamic polar generation (CST parametric airfoils, 3D Vortex Lattice Method, and CCBlade BEMT) with real-time multi-fidelity 6-DOF RK4 integration, zero-dependency MAVLink v2 lockstep communication, and a lightweight containerized PX4 Autopilot SITL stack optimized for macOS (Apple Silicon / Intel).
 
@@ -23,15 +23,16 @@
   - Lateral tire cornering stiffness, nose-gear rotation freedom ($V_{\text{rot}}$), and automatic idle parking brake.
   - Surface boundary layer turbulence attenuation preventing parked airframe drift.
 - **Zero-Dependency MAVLink v2 Lockstep & QGC Integration**:
-  - Direct hardware-in-the-loop (HIL) lockstep (`HIL_SENSOR`, `HIL_ACTUATOR_CONTROLS`) over TCP port `4560`.
+  - Direct hardware-in-the-loop (HIL) lockstep (`HIL_SENSOR`, `HIL_ACTUATOR_CONTROLS`) over TCP port `4560`, bridged via a C++17 MAVLink standby proxy (`unity_mavlink_standby_proxy`) so upstream PX4-Autopilot stays unmodified.
   - True dynamic pressure ($\frac{1}{2}\rho V^2$) airspeed telemetry for PX4 EKF2 wind estimation and TECS fixed-wing controllers.
   - Independent UDP telemetry stream (`UDP :14550`) for simultaneous QGroundControl mission monitoring.
-- **Unified 5-Step Engineering Workbench & Containerized macOS SITL Stack**:
+- **Unified 6-Step Engineering Workbench & Containerized macOS SITL Stack**:
   - Native container management via Colima (`containerd` + `vz` + `virtiofs`) and Apple `container` CLI.
-  - Unified 5-step Editor Workbench (`FlightDynamicsEngineeringWizard`) with modular panels (`AeroDesignPanel`, `InfraControlPanel`, `SimulationEnvironmentPanel`, `Px4TuningPanel`, `TelemetryLogPanel`) and `SitlInfraController` for real-time VM/container status badges, 1-click SITL startup, PX4 parameter tuning, and live telemetry plotting (`Assets/FlightLogs/` + `FlightLogSettingsWindow`).
-- **ROS 2 Humble & Micro-XRCE-DDS Support**:
+  - Unified 6-step Editor Workbench (`FlightDynamicsEngineeringWizard`) with modular English panels (`AeroDesignPanel`, `InfraControlPanel`, `SimulationEnvironmentPanel`, `Px4TuningPanel`, `TelemetryLogPanel`, `Ros2Nav2Panel`) and `SitlInfraController` for real-time VM/container status badges, 1-click SITL startup, PX4 parameter tuning, live telemetry plotting (`Assets/FlightLogs/` + `FlightLogSettingsWindow`), and ROS 2/Nav2 control.
+- **ROS 2 Humble, Micro-XRCE-DDS & Nav2 Obstacle Avoidance**:
   - Native uORB topic bridging over UDP port `8888` (`/fmu/in/*` and `/fmu/out/*`).
   - Pre-configured Python offboard trajectory controller for autonomous mission execution.
+  - Integrated **Nav2 + RViz2 (`noVNC :6080`)** autonomous obstacle avoidance pipeline with Unity 2D Raycast LiDAR (`Ros2LidarAndObstacleCourse`, `UDP :8890`) and `unity_nav2_px4_bridge.py`.
 - **Clean-Room Engineering & Permissive Licensing**:
   - 100% free of GPL/LGPL contamination. Pure Apache 2.0 license.
 
@@ -65,7 +66,7 @@ flowchart TD
     subgraph HardwareLoop["Autopilot & Ground Station Telemetry"]
         PX4["PX4 SITL Container<br/>(v1.15 Lockstep :4560)"]
         QGC["QGroundControl GCS<br/>(UDP :14550)"]
-        ROS2["ROS 2 Humble<br/>(Micro-XRCE-DDS :8888)"]
+        ROS2["ROS 2 Humble + Nav2<br/>(Micro-XRCE-DDS :8888 / noVNC :6080)"]
         L0 & L1 & L2 & L3 <-->|"MAVLink v2 Lockstep"| PX4
         PX4 <-->|"Telemetry"| QGC
         PX4 <-->|"uORB Topics"| ROS2
@@ -78,9 +79,9 @@ flowchart TD
 
 | Vehicle Category | PX4 Model Flag | Mass (kg) | Wingspan | Propulsion Setup | Takeoff Mode | Actuator Mapping |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Multicopter (X)** | `iris` | 1.50 kg | — | 4× Brushless Motors (Quad X) | Vertical VTOL | Channels 1..4: Motors |
-| **Fixed-Wing UAV** | `plane` | 3.20 kg | 1.80 m | 1× Pusher Propeller + 4 Aileron/Elev/Rud | Runway Ground Roll | Ch 1: Aileron, Ch 2: Elev, Ch 3: Rud, Ch 4: Throttle |
-| **QuadPlane VTOL** | `standard_vtol`| 4.50 kg | 2.10 m | 4× VTOL Motors + 1 Pusher Motor + Surfaces | Hybrid VTOL & Cruise | Ch 1..4: VTOL, Ch 5: Pusher, Ch 6..8: Surfaces |
+| **Multicopter (X)** | `iris` | 1.65 kg | — (0.45 m diag) | 4× Brushless Motors (Quad X) | Vertical VTOL | Ch 1..4: Motors |
+| **Fixed-Wing UAV** | `plane` | 3.20 kg | 1.80 m | 1× Forward Tractor Propeller + Aileron/Elev/Rud | Runway Ground Roll | PX4 Ch 5: Throttle, Ch 6..9: Ail/Elev/Rud (Ch 1..4 fallback) |
+| **QuadPlane VTOL** | `standard_vtol`| 5.40 kg | 1.80 m | 4× VTOL Lift Rotors + 1× Cruise Propeller + Surfaces | Hybrid VTOL & Cruise | Ch 1..4: VTOL, Ch 5: Cruise Prop, Ch 6..9: Surfaces |
 
 ---
 
@@ -93,22 +94,22 @@ flowchart TD
 - **.NET SDK**: .NET 8 or 9 SDK (for building the core dynamics assembly).
 
 ### 2. Build the Core Dynamics Engine
-Verify all 196 automated assertions and build the managed assemblies:
+Verify all 235 automated assertions and build the managed assemblies:
 
 ```bash
-git clone git@github.com:jyhuh/UnityDrone.git
+git clone https://github.com/jyhuh/UnityDrone.git
 cd UnityDrone
 ./scripts/build-and-package.sh
 ```
 
 ### 3. Launch PX4 SITL & Run in Unity
 
-#### Option A: In-Editor Unified 5-Step Workbench (Recommended)
-1. Open the project in **Unity 6** and open `Tools > FlightDynamics 6-DOF > Unified 5-Step Engineering Workbench`.
-2. **Step 1 (`공력/설계`)**: Choose your airframe (`iris` / `plane` / `standard_vtol`) and run Stage-1 aerodynamic baking.
-3. **Step 2 (`인프라`)**: Click **[▶ 인프라 전체 시작]** to start Colima/Apple container runtime, `unity-px4-sitl`, and `unity-ros2-dds` while monitoring live status badges in the header.
-4. **Step 3–5 (`시뮬레이션 환경` / `PX4 튜닝` / `계측/로그`)**: Click **[▶ 시뮬레이션 시작]**, tune PX4 parameters or send `pxh>` commands, and inspect real-time telemetry plots & saved logs in `Assets/FlightLogs/`.
-5. Optionally open **QGroundControl** (`UDP :14550`) to monitor telemetry or command autonomous waypoint missions.
+#### Option A: In-Editor Unified Engineering Workbench (Recommended)
+1. Open the project in **Unity 6** and open `Tools > FlightDynamics 6-DOF > Unified 5-Step Engineering Workbench` (6-tab UI).
+2. **Step 1 (`1. Aero/Design`)**: Choose your airframe (`iris` / `plane` / `standard_vtol`) and run Stage-1 aerodynamic baking.
+3. **Step 2 (`2. Infra`)**: Click **`▶ Start All Infra`** to start Colima/Apple container runtime, `unity-ros2-dds`, and `unity-px4-sitl` while monitoring live status badges in the header.
+4. **Steps 3–5 (`3. Environment` / `4. PX4 Tuning` / `5. Telemetry`)**: Click **`▶ Start Simulation`**, tune PX4 parameters or send `pxh>` commands, and inspect real-time telemetry plots & saved logs in `Assets/FlightLogs/`.
+5. **Step 6 (`6. ROS2/Nav2`)** *(Optional)*: Enable `Ros2LidarAndObstacleCourse`, launch **Nav2 + RViz2**, and open `http://localhost:6080/vnc.html` to command autonomous obstacle avoidance, or open **QGroundControl** (`UDP :14550`) for mission monitoring.
 
 #### Option B: Terminal CLI
 ```bash
@@ -117,6 +118,9 @@ cd UnityDrone
 
 # Check container status
 ./scripts/px4-sitl.sh status
+
+# Launch ROS 2 Nav2 + RViz2 (noVNC at http://localhost:6080/vnc.html)
+./scripts/px4-sitl.sh ros2-nav2
 
 # Stop containers after session
 ./scripts/px4-sitl.sh down
@@ -135,7 +139,8 @@ Comprehensive engineering guides, mathematical derivations, and setup manuals ar
 2. [**Ground Contact, Runway Friction & Landing Gear Mechanics**](docs/ground-contact-model.md) — Coulomb rolling resistance, lateral tire grip, takeoff rotation dynamics ($V_{\text{rot}}$), and boundary-layer turbulence attenuation.
 3. [**PX4-Autopilot SITL & Container Stack Setup (macOS)**](docs/px4-sitl-setup.md) — Colima containerd optimization, MAVLink lockstep over TCP, dynamic pressure airspeed streaming, and port routing.
 4. [**Vehicle Configuration & Parameter Tuning**](docs/vehicle-configuration.md) — Vehicle geometry configuration, aerodynamic polar baking, and actuator channel fallback matrix.
-5. [**ROS 2 Humble & Micro-XRCE-DDS Integration**](docs/ros2-integration.md) — DDS topic mapping, offboard trajectory streaming, and Python autonomous orbit controller.
+5. [**ROS 2 Humble & Micro-XRCE-DDS Integration**](docs/ros2-integration.md) — DDS topic mapping, offboard trajectory streaming, Python autonomous orbit controller, and Nav2 + RViz2 (noVNC) obstacle avoidance.
+6. [**Task & Roadmap Backlog**](docs/roadmap.md) — Feature backlog and verification checklist *(in Korean)*.
 
 ---
 
@@ -154,10 +159,11 @@ UnityDrone/
 │   ├── ground-contact-model.md    # Runway Friction & Rotation Dynamics
 │   ├── px4-sitl-setup.md          # macOS Colima SITL Deployment Guide
 │   ├── vehicle-configuration.md   # Vehicle Specs & Mixer Calibration
-│   └── ros2-integration.md        # ROS 2 Autonomy & uORB Topic Guide
+│   ├── ros2-integration.md        # ROS 2 Autonomy & uORB Topic Guide
+│   └── roadmap.md                 # Feature Backlog & Verification Checklist (Korean)
 ├── dotnet/
 │   ├── FlightDynamics6DoF.Core/   # Pure C# .NET Standard 2.1 Core Physics Engine
-│   └── FlightDynamics6DoF.Tests/  # 196 Automated Unit & Dynamics Test Assertions
+│   └── FlightDynamics6DoF.Tests/  # 235 Automated Unit & Dynamics Test Assertions
 ├── Packages/
 │   └── com.aerospace.flightdynamics6dof/ # UPM Distribution Package
 ├── scripts/

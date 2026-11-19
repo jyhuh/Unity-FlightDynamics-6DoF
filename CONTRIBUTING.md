@@ -14,7 +14,7 @@ All contributors and maintainers are expected to adhere to our [Code of Conduct]
 
 We adhere to a streamlined **Trunk-Based Development** (or GitHub Flow) workflow:
 
-1. **`main` Branch**: Production-ready, stable, and protected. Every commit on `main` must pass all 190+ automated engineering assertions and compile cleanly in Unity 6.
+1. **`main` Branch**: Production-ready, stable, and protected. Every commit on `main` must pass all 235 automated engineering assertions and compile cleanly in Unity 6.
 2. **Feature / Fix Branches**: Branch off `main` using descriptive naming:
    - `feat/<feature-name>` (e.g., `feat/vtol-tilt-rotor-mixing`)
    - `fix/<issue-description>` (e.g., `fix/runway-pitch-rotation`)
@@ -69,7 +69,7 @@ Before requesting a review, verify the following:
    ```bash
    ./scripts/build-and-package.sh
    ```
-   **All 190+ engineering unit tests must pass** (`ALL 190 ENGINEERING ASSERTIONS PASSED SUCCESSFULLY`), and the Unity 6 C# compiler must complete with **0 warnings and 0 errors**.
+   **All 235 engineering unit tests must pass** (`ALL 235 ENGINEERING ASSERTIONS PASSED SUCCESSFULLY`), and the Unity 6 C# compiler must complete with **0 warnings and 0 errors**.
 2. **MAVLink & SITL Compatibility**:
    If changing sensor suites, actuator channels, or flight dynamics, verify that both PX4 SITL lockstep (`TCP :4560`) and QGroundControl (`UDP :14550`) operate without regressions.
 3. **No GPL Contamination**:

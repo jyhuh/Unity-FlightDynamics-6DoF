@@ -37,6 +37,7 @@ This documentation covers mathematical formulations, multi-fidelity solver archi
   - Micro-XRCE-DDS Agent Architecture (`UDP :8888`)
   - Live uORB Topic Introspection (`/fmu/in/*` and `/fmu/out/*`)
   - Autonomous Trajectory Offboard Node (`unity_px4_offboard_node.py`)
+  - Nav2 + RViz2 (noVNC) Autonomous Obstacle Avoidance & Unity 2D Raycast LiDAR (`UDP :8890`)
 
 ---
 
@@ -50,7 +51,7 @@ This documentation covers mathematical formulations, multi-fidelity solver archi
 
 ### 4. Project Task & Roadmap
 - [**Task & Roadmap Backlog**](roadmap.md)
-  - Unimplemented feature backlog (Airframe Designer Popup, Top-bar Infra Quick Controls, Altitude Wind/Gust Layers, Dynamic Telemetry Graphs)
+  - Unimplemented feature backlog (Airframe Designer Popup, Top-bar Infra Quick Controls, Altitude Wind/Gust Layers)
   - Pending verification & End-to-End testing checklist (ROS 2 + Nav2 + RViz2 noVNC, Fixed-Wing/VTOL SITL)
 
 ---
