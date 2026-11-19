@@ -2,6 +2,11 @@
 
 FlightDynamics 6-DOF is structured around a **Two-Stage Architecture** designed to balance physical fidelity against real-time 400 Hz numerical execution budgets.
 
+![FlightDynamics 6-DOF System Architecture](images/system-architecture.png)
+
+<details>
+<summary>View Mermaid diagram</summary>
+
 ```mermaid
 flowchart TD
     subgraph S1["Stage 1: Pre-Simulation Analysis & Baking"]
@@ -36,6 +41,8 @@ flowchart TD
         NED_STATE --> UNITY_TF
     end
 ```
+
+</details>
 
 ---
 

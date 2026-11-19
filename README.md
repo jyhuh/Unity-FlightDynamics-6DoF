@@ -42,6 +42,11 @@
 
 FlightDynamics separates **Stage 1 (Pre-Simulation Aerodynamic Analysis)** from **Stage 2 (Real-Time 6-DOF Simulation)**:
 
+![FlightDynamics 6-DOF System Architecture](docs/images/system-architecture.png)
+
+<details>
+<summary>View Mermaid diagram</summary>
+
 ```mermaid
 flowchart TD
     subgraph Stage1["Stage 1: Pre-Flight Aerodynamic Analysis & Polar Baking"]
@@ -72,6 +77,8 @@ flowchart TD
         PX4 <-->|"uORB Topics"| ROS2
     end
 ```
+
+</details>
 
 ---
 
@@ -154,6 +161,8 @@ UnityDrone/
 │   ├── px4-sitl/                  # PX4 v1.15 SITL Containerfile & Startup Scripts
 │   └── ros2/                      # ROS 2 Humble & Micro-XRCE-DDS Workspace
 ├── docs/                          # GitHub Wiki-compatible Technical Documentation
+│   ├── images/
+│   │   └── system-architecture.png # System Architecture Diagram
 │   ├── README.md                  # Documentation Index & Sitemap
 │   ├── architecture.md            # Physics & Mathematical Architecture
 │   ├── ground-contact-model.md    # Runway Friction & Rotation Dynamics
