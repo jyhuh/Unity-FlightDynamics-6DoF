@@ -45,6 +45,9 @@ Obfuscated/
 /docker/config/*.params
 /Assets/FlightLogs/
 /Assets/FlightLogs.meta
+/Packages/com.unity.asset-store-tools/
+__pycache__/
+*.pyc
 
 # --- 5. OS & IDE Files ---
 .DS_Store
