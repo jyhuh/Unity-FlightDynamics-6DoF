@@ -314,9 +314,23 @@ namespace FlightDynamics6DoF.Editor
             if (SceneVehicle != null)
             {
                 Undo.RecordObject(SceneVehicle, "Modify Scene Vehicle Spec");
+                Undo.RecordObject(SceneVehicle.transform, "Update Scene Vehicle Ground Height");
                 SceneVehicle.InlineConfig = cfg;
                 SceneVehicle.RunStage1AnalysisAndBake();
+                ProceduralAircraftVisualBuilder.RebuildVehicleVisuals(SceneVehicle);
+                if (!Application.isPlaying && SceneVehicle.transform.position.y < 1.5f)
+                {
+                    var p = SceneVehicle.transform.position;
+                    SceneVehicle.transform.position = new Vector3(p.x, Mathf.Max(0.06f, (float)cfg.LandingGearHeightMeters), p.z);
+                }
+                else if (Application.isPlaying && SceneVehicle.Engine != null && SceneVehicle.Engine.State.IsGrounded)
+                {
+                    var p = SceneVehicle.transform.position;
+                    SceneVehicle.transform.position = new Vector3(p.x, Mathf.Max(0.06f, (float)cfg.LandingGearHeightMeters), p.z);
+                    SceneVehicle.InitializeSimulationEngine();
+                }
                 EditorUtility.SetDirty(SceneVehicle);
+                SceneView.RepaintAll();
                 targetDesc = TargetProfile != null ? $"{targetDesc} + SceneVehicle" : $"SceneVehicle ({SceneVehicle.name})";
             }
             if (TargetProfile == null && SceneVehicle == null)

@@ -116,15 +116,41 @@ namespace FlightDynamics6DoF.Unity
             }
             else
             {
-                // Multicopter Landing Skids resting exactly at -gearHeight
+                // Multicopter Landing Skids resting exactly at -gearHeight with connecting struts
                 float skidSpread = Mathf.Max(0.12f, fusDia * 0.9f);
                 float skidBottomY = -gearHeight + 0.008f;
+                float strutTopY = -fusDia * 0.22f;
+                float strutMidY = 0.5f * (strutTopY + skidBottomY);
+                float strutLen = Mathf.Max(0.02f, Mathf.Abs(strutTopY - skidBottomY));
+                float strutZ = fusLen * 0.16f;
+
                 CreatePart(PrimitiveType.Cube, "LandingSkid_L", visualRoot.transform,
                     new Vector3(-skidSpread, skidBottomY, 0f), Quaternion.identity,
                     new Vector3(0.015f, 0.015f, fusLen * 0.65f), darkCarbonMat);
                 CreatePart(PrimitiveType.Cube, "LandingSkid_R", visualRoot.transform,
                     new Vector3(skidSpread, skidBottomY, 0f), Quaternion.identity,
                     new Vector3(0.015f, 0.015f, fusLen * 0.65f), darkCarbonMat);
+
+                // Angled struts connecting fuselage to skids
+                Vector3[] strutTops = {
+                    new Vector3(-fusDia * 0.35f, strutTopY,  strutZ),
+                    new Vector3(-fusDia * 0.35f, strutTopY, -strutZ),
+                    new Vector3( fusDia * 0.35f, strutTopY,  strutZ),
+                    new Vector3( fusDia * 0.35f, strutTopY, -strutZ)
+                };
+                Vector3[] strutBots = {
+                    new Vector3(-skidSpread, skidBottomY,  strutZ),
+                    new Vector3(-skidSpread, skidBottomY, -strutZ),
+                    new Vector3( skidSpread, skidBottomY,  strutZ),
+                    new Vector3( skidSpread, skidBottomY, -strutZ)
+                };
+                for (int s = 0; s < 4; s++)
+                {
+                    Quaternion sRot = Quaternion.FromToRotation(Vector3.up, (strutTops[s] - strutBots[s]).normalized);
+                    CreatePart(PrimitiveType.Cylinder, $"SkidStrut_{s}", visualRoot.transform,
+                        0.5f * (strutTops[s] + strutBots[s]), sRot,
+                        new Vector3(0.010f, Vector3.Distance(strutTops[s], strutBots[s]) * 0.5f, 0.010f), darkCarbonMat);
+                }
             }
 
             // 3. 3D Lifting Surfaces (Main Wing, Horizontal Tail, Vertical Fin)
@@ -147,10 +173,23 @@ namespace FlightDynamics6DoF.Unity
                     }
                     else
                     {
-                        Vector3 wingCenter = new Vector3((float)apexU.X, (float)apexU.Y, (float)apexU.Z - meanChord * 0.45f);
-                        CreatePart(PrimitiveType.Cube, $"Wing_{w.Name}", visualRoot.transform,
-                            wingCenter, Quaternion.identity,
-                            new Vector3(span, thickness, meanChord), wingMat);
+                        float halfSpan = span * 0.5f;
+                        float dihedralRad = (float)w.DihedralDeg * Mathf.Deg2Rad;
+                        float sweepRad = (float)w.SweepQuarterChordDeg * Mathf.Deg2Rad;
+                        float midXOffset = halfSpan * 0.5f;
+                        float midZOffset = -midXOffset * Mathf.Tan(sweepRad);
+                        float midYOffset = midXOffset * Mathf.Tan(dihedralRad);
+                        Vector3 baseApex = new Vector3((float)apexU.X, (float)apexU.Y, (float)apexU.Z - meanChord * 0.45f);
+
+                        CreatePart(PrimitiveType.Cube, $"Wing_{w.Name}_R", visualRoot.transform,
+                            baseApex + new Vector3(midXOffset, midYOffset, midZOffset),
+                            Quaternion.Euler(0f, (float)w.SweepQuarterChordDeg, (float)w.DihedralDeg),
+                            new Vector3(halfSpan, thickness, meanChord), wingMat);
+
+                        CreatePart(PrimitiveType.Cube, $"Wing_{w.Name}_L", visualRoot.transform,
+                            baseApex + new Vector3(-midXOffset, midYOffset, midZOffset),
+                            Quaternion.Euler(0f, -(float)w.SweepQuarterChordDeg, -(float)w.DihedralDeg),
+                            new Vector3(halfSpan, thickness, meanChord), wingMat);
                     }
                 }
             }
@@ -177,16 +216,16 @@ namespace FlightDynamics6DoF.Unity
                 CreatePart(PrimitiveType.Cylinder, $"MotorBell_{r.Name}", visualRoot.transform,
                     mountLocal, Quaternion.identity, new Vector3(0.042f, 0.020f, 0.042f), avionicsMat);
 
-                // Spinning Rotor Hub + Blades pivot
-                GameObject spinnerPivot = new GameObject($"RotorSpinner_{r.Name}");
-                spinnerPivot.transform.SetParent(visualRoot.transform, false);
-                spinnerPivot.transform.localPosition = mountLocal + new Vector3(0f, 0.022f, 0f);
-
                 // Orient rotor disk perpendicular to thrust axis
                 Vec3d thrustU = FrameConverter.FrdToUnityVector(r.ThrustAxisFrd).Normalized();
                 Vector3 thrustDir = new Vector3((float)thrustU.X, (float)thrustU.Y, (float)thrustU.Z);
-                if (thrustDir.sqrMagnitude > 0.01f)
-                    spinnerPivot.transform.localRotation = Quaternion.FromToRotation(Vector3.up, thrustDir.normalized);
+                Vector3 thrustNorm = thrustDir.sqrMagnitude > 0.01f ? thrustDir.normalized : Vector3.up;
+
+                // Spinning Rotor Hub + Blades pivot offset along thrust axis
+                GameObject spinnerPivot = new GameObject($"RotorSpinner_{r.Name}");
+                spinnerPivot.transform.SetParent(visualRoot.transform, false);
+                spinnerPivot.transform.localPosition = mountLocal + thrustNorm * 0.022f;
+                spinnerPivot.transform.localRotation = Quaternion.FromToRotation(Vector3.up, thrustNorm);
 
                 Material propMat = r.MountPositionFrd.X >= 0.0 ? frontPropMat : rearPropMat;
                 float diameter = (float)(r.Radius * 2.0);
