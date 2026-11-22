@@ -1,24 +1,31 @@
 {
   "name": "com.aerospace.flightdynamics6dof",
   "version": "1.0.0",
-  "displayName": "FlightDynamics 6-DOF: Nonlinear UAV/VTOL FDM & MAVLink Engineering Suite",
-  "description": "Engineering-grade 2-Stage Aerodynamic Analysis (NeuralFoil CST, AirfoilPrep Viterna/Du-Selig, 3D VLM, Slender Body, CCBlade BEMT, Slipstream Wake) and Multi-Fidelity (Level 0 Unity Rigidbody to Level 3 Full 6-DOF RK4) Flight Dynamics & MAVLink v2 / PX4 SITL Simulation Suite.",
+  "displayName": "FlightDynamics 6-DOF: Drone & UAV Suite",
+  "description": "Engineering-grade 2-Stage Aerodynamic Analysis (CST Airfoils, Viterna/Du-Selig, 3D VLM, Slender Body, CCBlade BEMT, Slipstream Wake), Multi-Fidelity 6-DOF RK4 Flight Physics (Levels 0-3), Built-in Standalone C# SO(3)/TECS Autopilot, 360° 2D LiDAR, Academic Telemetry Reports, and MAVLink v2 / PX4 SITL / ROS 2 Simulation Suite.",
   "unity": "2021.3",
   "license": "Apache-2.0",
+  "documentationUrl": "https://github.com/jyhuh/Unity-FlightDynamics-6DoF/tree/main/docs",
+  "licensesUrl": "https://github.com/jyhuh/Unity-FlightDynamics-6DoF/blob/main/LICENSE",
   "keywords": [
     "flight-dynamics",
     "6dof",
-    "aerodynamics",
-    "uav",
     "drone",
+    "uav",
     "vtol",
+    "fixed-wing",
+    "aerodynamics",
+    "autopilot",
     "mavlink",
     "px4",
     "sitl",
+    "ros2",
+    "lidar",
     "bemt",
     "vlm"
   ],
   "author": {
-    "name": "FlightDynamics 6-DOF Engineering"
+    "name": "FlightDynamics 6-DOF Engineering",
+    "url": "https://github.com/jyhuh/Unity-FlightDynamics-6DoF"
   }
 }

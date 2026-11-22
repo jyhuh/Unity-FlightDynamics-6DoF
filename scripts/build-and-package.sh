@@ -59,6 +59,7 @@ if [[ -d "$UNITY_MANAGED" && -f "$CSC_DLL" ]]; then
     -r:"$UNITY_MANAGED/UnityEngine.CoreModule.dll" \
     -r:"$UNITY_MANAGED/UnityEngine.PhysicsModule.dll" \
     -r:"$UNITY_MANAGED/UnityEngine.IMGUIModule.dll" \
+    -r:"$UNITY_MANAGED/UnityEngine.ImageConversionModule.dll" \
     -r:"$UNITY_MANAGED/UnityEngine.JSONSerializeModule.dll" \
     -r:"$UNITY_MANAGED/UnityEngine.SharedInternalsModule.dll" \
     "$ROOT_DIR/Packages/com.aerospace.flightdynamics6dof/Runtime/Assets/"*.cs \
@@ -71,6 +72,7 @@ if [[ -d "$UNITY_MANAGED" && -f "$CSC_DLL" ]]; then
     -r:"$UNITY_MANAGED/UnityEngine.CoreModule.dll" \
     -r:"$UNITY_MANAGED/UnityEngine.PhysicsModule.dll" \
     -r:"$UNITY_MANAGED/UnityEngine.IMGUIModule.dll" \
+    -r:"$UNITY_MANAGED/UnityEngine.ImageConversionModule.dll" \
     -r:"$UNITY_MANAGED/UnityEngine.JSONSerializeModule.dll" \
     -r:"$UNITY_MANAGED/UnityEngine.SharedInternalsModule.dll" \
     -r:"$UNITY_MANAGED/UnityEditor.CoreModule.dll" \
@@ -82,6 +84,13 @@ fi
 
 rm -rf "$STAGED_DIR"
 ls -lh "$PLUGIN_OUT_DIR"
+
+# 5. Build Unity Asset Store (.unitypackage) & UPM (.tgz) distribution archives
+if command -v python3 >/dev/null 2>&1 && [[ -f "$ROOT_DIR/scripts/package-asset-store.py" ]]; then
+  echo "[Step 5/5] Building Unity Asset Store (.unitypackage) & UPM (.tgz) packages into build/..."
+  python3 "$ROOT_DIR/scripts/package-asset-store.py"
+fi
+
 echo "======================================================================"
 echo " Packaging Complete!"
 echo "======================================================================"
