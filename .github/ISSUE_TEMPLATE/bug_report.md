@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Create a report to help us improve FlightDynamics 6-DOF
+about: Create a report to help us improve FlightDynamics 6-DOF: Drone & UAV Suite
 title: '[BUG] '
 labels: ['bug']
 assignees: ''
@@ -12,8 +12,8 @@ assignees: ''
 ### Environment
 - **Operating System:** macOS (Apple Silicon / Intel) / Linux / Windows
 - **Unity Version:** Unity 6 (6000.3.x) / 2021.3+
-- **PX4 Autopilot Version:** v1.15.0 / SITL
-- **Container Backend:** Colima (`containerd`) / Apple `container` / Native
+- **Autopilot Mode:** Standalone Built-in C# Autopilot / External PX4 v1.15.0 SITL
+- **Container Backend (if SITL):** Standalone (None) / Colima (`containerd`) / Apple `container` / Native
 - **Vehicle Type:** Multirotor (iris) / Fixed-Wing (plane) / VTOL (standard_vtol)
 - **Simulation Fidelity:** Level 0 / Level 1 / Level 2 / Level 3
 

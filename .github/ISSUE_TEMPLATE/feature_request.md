@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea or aerodynamic capability for FlightDynamics 6-DOF
+about: Suggest an idea or aerodynamic capability for FlightDynamics 6-DOF: Drone & UAV Suite
 title: '[FEAT] '
 labels: ['enhancement']
 assignees: ''

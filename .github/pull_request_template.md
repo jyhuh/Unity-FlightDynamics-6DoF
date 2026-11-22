@@ -23,7 +23,7 @@
 
 ### Verification & Testing
 <!-- Detail how this change was tested and verified -->
-- [ ] Passed automated engineering test suite via `./scripts/build-and-package.sh` (All 235 assertions passing)
+- [ ] Passed automated engineering test suite via `./scripts/build-and-package.sh` (All 240 assertions passing)
 - [ ] Verified clean compilation with zero warnings/errors in Unity 6 (`6000.3.x`)
 - [ ] Verified MAVLink lockstep communication with PX4 SITL (TCP :4560)
 - [ ] Verified telemetry streaming with QGroundControl (UDP :14550)

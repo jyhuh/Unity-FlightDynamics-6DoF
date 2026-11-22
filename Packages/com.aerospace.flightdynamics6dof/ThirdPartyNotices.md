@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-`FlightDynamics 6-DOF: Nonlinear UAV/VTOL FDM & MAVLink Engineering Suite` (`com.aerospace.flightdynamics6dof`) is licensed under the **Apache License, Version 2.0**.
+`FlightDynamics 6-DOF: Drone & UAV Suite` (`com.aerospace.flightdynamics6dof`) is licensed under the **Apache License, Version 2.0**.
 
 All aerodynamic, flight dynamics, control allocation, and protocol algorithms in `FlightDynamics6DoF.Core.dll` are clean-room C# (.NET Standard 2.1) implementations based strictly on permissive (**Apache 2.0 / MIT**) open-source formulations and public-domain aerospace literature. No GPL/LGPL libraries (such as XFOIL, AVL, QPROP, XFLR5, or OpenFOAM) are included or linked.
 

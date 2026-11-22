@@ -1,5 +1,5 @@
-FlightDynamics 6-DOF: Nonlinear UAV/VTOL FDM, Aerodynamic Analyzer & MAVLink Engineering Suite
-Copyright 2026 FlightDynamics 6-DOF Project
+FlightDynamics 6-DOF: Drone & UAV Suite
+Copyright 2026 FlightDynamics 6-DOF Project (https://github.com/jyhuh/Unity-FlightDynamics-6DoF)
 
 This product includes clean-room C# (.NET Standard 2.1) implementations of aerodynamic, flight dynamics,
 and control mathematical formulations inspired by and compatible with the following permissive

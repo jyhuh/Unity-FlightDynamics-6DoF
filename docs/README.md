@@ -1,6 +1,6 @@
-# FlightDynamics 6-DOF Documentation
+# FlightDynamics 6-DOF: Drone & UAV Suite Documentation
 
-Welcome to the technical documentation and developer guides for **FlightDynamics 6-DOF**.
+Welcome to the technical documentation and developer guides for **FlightDynamics 6-DOF: Drone & UAV Suite**.
 
 This documentation covers mathematical formulations, multi-fidelity solver architectures, containerized SITL workflows on macOS, and vehicle configuration tutorials for aerospace simulation in Unity 6.
 
