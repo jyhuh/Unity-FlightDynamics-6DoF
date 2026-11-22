@@ -215,6 +215,8 @@ namespace FlightDynamics6DoF.Core.Specs
         public double RotorMomentOfInertiaKgM2 = 4.5e-5;
         public double MaxRpm = 9500.0;
         public double IdleRpm = 800.0;
+        public double MaxMotorPowerWatts = 350.0;
+        public double MotorKv = 920.0;
         public int ActuatorChannelIndex = 0;
         public int TiltServoChannelIndex = -1;
         public double MaxTiltDeg = 90.0;
@@ -278,6 +280,7 @@ namespace FlightDynamics6DoF.Core.Specs
         public double BatteryCells = 4;
         public double BatteryCapacityMah = 5000.0;
         public double BatteryInternalResistanceOhm = 0.018;
+        public string SpecNotes = "";
 
         /// <summary>
         /// Vertical distance from aircraft CG down to landing gear contact point (wheels or skids) in meters.
