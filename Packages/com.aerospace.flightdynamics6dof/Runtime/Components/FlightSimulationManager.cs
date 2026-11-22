@@ -120,6 +120,11 @@ namespace FlightDynamics6DoF.Unity
                 VehicleAirframeCategory.HybridQuadPlaneVtol => AircraftConfigSpec.CreateQuadPlaneVtolMillie(),
                 _ => AircraftConfigSpec.CreateStandardQuadcopterX()
             };
+            if (vehicle.transform.position.y <= 0.01f)
+            {
+                var p = vehicle.transform.position;
+                vehicle.transform.position = new Vector3(p.x, Mathf.Max(0.06f, (float)vehicle.InlineConfig.LandingGearHeightMeters), p.z);
+            }
             bool hasExternalSitlScript = System.IO.File.Exists(System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "scripts", "px4-sitl.sh"));
             vehicle.FidelityLevel = fidelityLevel;
             vehicle.UseInternalFlightController = (mavlinkMode == MavlinkBridgeMode.DirectGcsAutopilot) || !hasExternalSitlScript;
