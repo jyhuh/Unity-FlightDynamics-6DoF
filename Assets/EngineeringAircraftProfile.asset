@@ -383,7 +383,7 @@ MonoBehaviour:
       RandomSeed: 42
   BakedDatabase:
     AircraftName: AeroQuad X-450 Engineering Research UAV
-    AnalysisTimestampUtc: 2026-11-17T08:10:42.0236910Z
+    AnalysisTimestampUtc: 2026-11-20T07:44:34.3281620Z
     TotalMassKg: 1.65
     CenterOfGravityFrd:
       X: 0

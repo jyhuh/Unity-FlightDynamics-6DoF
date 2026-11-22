@@ -36,6 +36,7 @@ namespace FlightDynamics6DoF.Editor
         public string DetectedBackendName { get; private set; } = "colima";
         public string VmStatus { get; private set; } = "CHECKING...";
         public string ContainerdStatus { get; private set; } = "CHECKING...";
+        public bool IsSitlWorkspaceAvailable => File.Exists(GetManagerScriptPath());
         public bool IsQueryingStatus { get; private set; }
         public bool IsOperationRunning => _isOperationRunning;
         public string LastStatusSummary => _lastStatusSummary;
@@ -46,11 +47,11 @@ namespace FlightDynamics6DoF.Editor
 
         private double _lastStatusQueryTime;
 
-        private static readonly StringBuilder _consoleLogBuffer = new StringBuilder();
-        private static readonly ConcurrentQueue<string> _pendingLogLines = new ConcurrentQueue<string>();
-        private static readonly ConcurrentQueue<Action> _mainThreadActions = new ConcurrentQueue<Action>();
-        private static string _lastStatusSummary = "Ready";
-        private static bool _isOperationRunning;
+        private readonly StringBuilder _consoleLogBuffer = new StringBuilder();
+        private readonly ConcurrentQueue<string> _pendingLogLines = new ConcurrentQueue<string>();
+        private readonly ConcurrentQueue<Action> _mainThreadActions = new ConcurrentQueue<Action>();
+        private string _lastStatusSummary = "Ready";
+        private bool _isOperationRunning;
 
         public bool IsContainerRunning(string name) =>
             _containers.TryGetValue(name, out var info) && info.IsRunning;
@@ -122,7 +123,13 @@ namespace FlightDynamics6DoF.Editor
 
                 try
                 {
-                    if (File.Exists(scriptPath))
+                    if (!File.Exists(scriptPath))
+                    {
+                        newBackend = "standalone-c#";
+                        newVm = "STANDALONE";
+                        newCd = "BUILT-IN GNC";
+                    }
+                    else
                     {
                         var psi = new ProcessStartInfo
                         {

@@ -199,7 +199,7 @@ namespace FlightDynamics6DoF.Editor
                 launcher.Px4AirframeModel = host.AirframeModel;
                 launcher.ExportStage1AirframeParamsForContainer();
             }
-            else if (EditingParamTable != null)
+            else if (EditingParamTable != null && host.Infra.IsSitlWorkspaceAvailable)
             {
                 string configDir = Path.Combine(SitlInfraController.GetWorkspaceRoot(), "docker", "config");
                 Directory.CreateDirectory(configDir);
@@ -212,8 +212,13 @@ namespace FlightDynamics6DoF.Editor
         private static void SendPxh(SitlInfraController infra, string command)
         {
             var launcher = Object.FindFirstObjectByType<Px4SitlProcessLauncher>();
-            if (launcher != null) launcher.SendPxhCommand(command);
-            else infra.RunScriptAction($"pxh {command}", $"[pxh>] {command}", () => EditorApplication.timeSinceStartup);
+            if (launcher != null)
+            {
+                launcher.SendPxhCommand(command);
+                return;
+            }
+            if (infra.IsSitlWorkspaceAvailable)
+                infra.RunScriptAction($"pxh {command}", $"[pxh>] {command}", () => EditorApplication.timeSinceStartup);
         }
     }
 }

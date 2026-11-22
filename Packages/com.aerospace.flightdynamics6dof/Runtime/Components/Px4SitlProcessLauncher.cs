@@ -72,15 +72,26 @@ namespace FlightDynamics6DoF.Unity
         {
             get
             {
-                if (!string.IsNullOrEmpty(WorkspaceRootPath) && Directory.Exists(WorkspaceRootPath))
-                    return WorkspaceRootPath;
-
                 try
                 {
-                    string candidate = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-                    if (Directory.Exists(candidate)) return candidate;
+                    string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+                    if (Directory.Exists(projectRoot))
+                    {
+                        // Only honor an explicit WorkspaceRootPath override if it actually contains scripts/px4-sitl.sh
+                        // AND equals the current Unity project root (prevents stale serialized paths from another project).
+                        if (!string.IsNullOrEmpty(WorkspaceRootPath) &&
+                            Directory.Exists(WorkspaceRootPath) &&
+                            string.Equals(Path.GetFullPath(WorkspaceRootPath), projectRoot, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return WorkspaceRootPath;
+                        }
+                        return projectRoot;
+                    }
                 }
                 catch { }
+
+                if (!string.IsNullOrEmpty(WorkspaceRootPath) && Directory.Exists(WorkspaceRootPath))
+                    return WorkspaceRootPath;
 
                 return WorkspaceRootPath ?? "";
             }
@@ -101,6 +112,9 @@ namespace FlightDynamics6DoF.Unity
             Path.Combine(EffectivePx4RepositoryPath, "build", "px4_sitl_default", "bin", "px4");
 
         public bool IsPx4BinaryBuilt => File.Exists(Px4BinaryPath);
+
+        public bool IsSitlWorkspaceAvailable =>
+            !string.IsNullOrEmpty(EffectiveWorkspaceRoot) && File.Exists(ManagerScriptPath);
 
         private string ManagerScriptPath => Path.Combine(EffectiveWorkspaceRoot, "scripts", "px4-sitl.sh");
 
@@ -127,6 +141,14 @@ namespace FlightDynamics6DoF.Unity
 
         private void Start()
         {
+            if (!IsSitlWorkspaceAvailable && !IsPx4BinaryBuilt)
+            {
+                _lastConsoleSummary = "Standalone Mode Active (Built-in C# SO(3)/TECS Autopilot — zero external container dependencies)";
+                if (TargetVehicle != null)
+                    TargetVehicle.UseInternalFlightController = true;
+                return;
+            }
+
             ExportStage1AirframeParamsForContainer();
             if (AutoLaunchPx4OnPlay)
             {
@@ -163,6 +185,8 @@ namespace FlightDynamics6DoF.Unity
             {
                 string wsRoot = EffectiveWorkspaceRoot;
                 if (string.IsNullOrEmpty(wsRoot)) return;
+                if (!IsSitlWorkspaceAvailable && !Directory.Exists(Path.Combine(wsRoot, "docker")))
+                    return;
 
                 string configDir = Path.Combine(wsRoot, "docker", "config");
                 Directory.CreateDirectory(configDir);
@@ -290,6 +314,14 @@ namespace FlightDynamics6DoF.Unity
 
         private bool RunContainerAction(string actionVerb, string summaryMessage)
         {
+            if (!IsSitlWorkspaceAvailable)
+            {
+                _lastConsoleSummary = "Standalone C# Autopilot Mode (external scripts/px4-sitl.sh not present in this Unity project).";
+                if (TargetVehicle != null)
+                    TargetVehicle.UseInternalFlightController = true;
+                return false;
+            }
+
             try
             {
                 string envPrefix = GetBackendEnvPrefix();
@@ -410,6 +442,11 @@ namespace FlightDynamics6DoF.Unity
 
             if (RuntimeBackend != ContainerRuntimeBackend.NativeBinary)
             {
+                if (!IsSitlWorkspaceAvailable)
+                {
+                    _containerStackMarkedRunning = false;
+                    return;
+                }
                 try
                 {
                     string envPrefix = GetBackendEnvPrefix();
@@ -502,6 +539,12 @@ namespace FlightDynamics6DoF.Unity
 
         private bool RunVmAction(string actionVerb, string summaryMessage)
         {
+            if (!IsSitlWorkspaceAvailable)
+            {
+                _lastConsoleSummary = "Standalone C# Autopilot Mode (external Colima VM script not present in this Unity project).";
+                return false;
+            }
+
             try
             {
                 string envPrefix = GetBackendEnvPrefix();
@@ -536,12 +579,94 @@ namespace FlightDynamics6DoF.Unity
             }
         }
 
+        private bool TryExecuteInternalFlightControllerCommand(string command)
+        {
+            if (TargetVehicle == null || TargetVehicle.Engine == null || TargetVehicle.FlightController == null)
+                return false;
+
+            var mavNode = TargetVehicle.GetComponent<MavlinkNetworkNode>();
+            bool externalPx4ActivelyControlling = mavNode != null && mavNode.IsConnected && mavNode.Bridge.TotalHilActuatorFramesReceived > 0;
+            if (externalPx4ActivelyControlling && !TargetVehicle.UseInternalFlightController)
+                return false;
+
+            TargetVehicle.UseInternalFlightController = true;
+            var fc = TargetVehicle.FlightController;
+            var st = TargetVehicle.Engine.State;
+            double yaw = st.AttitudeBodyToNed.ToEulerZyx().Z;
+            string cmd = command.Trim().ToLowerInvariant();
+
+            if (cmd == "commander arm")
+            {
+                fc.Arm(st.PositionNed, yaw);
+                _lastConsoleSummary = "[Standalone C# Autopilot] Armed";
+                return true;
+            }
+            if (cmd == "commander disarm")
+            {
+                fc.Disarm();
+                _lastConsoleSummary = "[Standalone C# Autopilot] Disarmed";
+                return true;
+            }
+            if (cmd.StartsWith("commander takeoff"))
+            {
+                fc.CommandTakeoff(st.PositionNed, yaw, TargetVehicle.InitialTakeoffAltitudeMeters);
+                _lastConsoleSummary = $"[Standalone C# Autopilot] Takeoff -> {TargetVehicle.InitialTakeoffAltitudeMeters:F1}m AGL";
+                return true;
+            }
+            if (cmd.Contains("auto:loiter"))
+            {
+                fc.CommandLoiterHold(st.PositionNed, yaw);
+                _lastConsoleSummary = "[Standalone C# Autopilot] Position Hold / Loiter";
+                return true;
+            }
+            if (cmd.Contains("auto:rtl"))
+            {
+                fc.CommandReturnToLaunch();
+                _lastConsoleSummary = "[Standalone C# Autopilot] Return to Launch (RTL)";
+                return true;
+            }
+            if (cmd == "commander land")
+            {
+                fc.CommandAutoLand(st.PositionNed);
+                _lastConsoleSummary = "[Standalone C# Autopilot] Auto-Land";
+                return true;
+            }
+            if (cmd.Contains("vtol_transition fixedwing"))
+            {
+                fc.CommandVtolTransition(true, st.PositionNed, yaw);
+                _lastConsoleSummary = "[Standalone C# Autopilot] VTOL Transition -> Fixed-Wing Cruise";
+                return true;
+            }
+            if (cmd.Contains("vtol_transition multicopter"))
+            {
+                fc.CommandVtolTransition(false, st.PositionNed, yaw);
+                _lastConsoleSummary = "[Standalone C# Autopilot] VTOL Transition -> Multicopter Hover";
+                return true;
+            }
+            if (cmd == "commander check" || cmd == "mavlink status")
+            {
+                _lastConsoleSummary = $"[Standalone C# Autopilot] Mode={fc.CurrentMode}, Armed={fc.IsArmed}, Alt={st.AltitudeAglMeters:F1}m, V={st.AirspeedMps:F1}m/s";
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>
-        /// Sends a PX4 NuttX/POSIX shell command (`pxh>`) to `unity-px4-sitl` (via Colima `nerdctl` or Apple `container`)
-        /// or to the local PX4 process stdin.
+        /// Sends a PX4 NuttX/POSIX shell command (`pxh>`) to `unity-px4-sitl` (via Colima `nerdctl` or Apple `container`),
+        /// or executes it directly on the built-in C# Flight Controller when running in Standalone mode.
         /// </summary>
         public void SendPxhCommand(string command)
         {
+            bool handledInternally = TryExecuteInternalFlightControllerCommand(command);
+            if (!IsSitlWorkspaceAvailable && RuntimeBackend != ContainerRuntimeBackend.NativeBinary)
+                return;
+            if (handledInternally && TargetVehicle != null && TargetVehicle.UseInternalFlightController)
+            {
+                var mavNode = TargetVehicle.GetComponent<MavlinkNetworkNode>();
+                if (mavNode == null || !mavNode.IsConnected)
+                    return;
+            }
+
             if (RuntimeBackend != ContainerRuntimeBackend.NativeBinary)
             {
                 try
@@ -593,11 +718,32 @@ namespace FlightDynamics6DoF.Unity
         }
 
         /// <summary>
-        /// Starts the ROS 2 Humble Offboard Trajectory Node (`unity_px4_offboard_node.py`) inside the `unity-ros2-dds` container.
+        /// Starts the ROS 2 Humble Offboard Trajectory Node (`unity_px4_offboard_node.py`) inside the `unity-ros2-dds` container,
+        /// or executes a built-in C# circular orbit mission when running in Standalone mode.
         /// </summary>
         public void StartRos2OffboardNode(float altitudeMeters = 10.0f, float orbitRadiusMeters = 8.0f)
         {
             StopRos2OffboardNode();
+
+            var mavNode = TargetVehicle != null ? TargetVehicle.GetComponent<MavlinkNetworkNode>() : null;
+            bool externalPx4Connected = mavNode != null && mavNode.IsConnected && mavNode.Bridge.TotalHilActuatorFramesReceived > 0;
+            if ((!IsSitlWorkspaceAvailable || !externalPx4Connected) && TargetVehicle != null && TargetVehicle.Engine != null && TargetVehicle.FlightController != null)
+            {
+                TargetVehicle.UseInternalFlightController = true;
+                TargetVehicle.FlightController.CommandCircularOrbit(
+                    TargetVehicle.Engine.State.PositionNed,
+                    altitudeMeters,
+                    orbitRadiusMeters,
+                    16);
+                _lastConsoleSummary = $"[Standalone C# Autopilot] Started Circular Orbit Mission (Alt={altitudeMeters:F1}m, R={orbitRadiusMeters:F1}m)";
+                Debug.Log($"[FlightDynamics6DoF] {_lastConsoleSummary}");
+                if (!IsSitlWorkspaceAvailable)
+                    return;
+            }
+
+            if (!IsSitlWorkspaceAvailable)
+                return;
+
             try
             {
                 string envPrefix = GetBackendEnvPrefix();
@@ -639,6 +785,14 @@ namespace FlightDynamics6DoF.Unity
 
         public void StopRos2OffboardNode()
         {
+            if (TargetVehicle != null && TargetVehicle.UseInternalFlightController && TargetVehicle.Engine != null && TargetVehicle.FlightController != null &&
+                TargetVehicle.FlightController.CurrentMode == AutopilotFlightMode.WaypointMission)
+            {
+                var st = TargetVehicle.Engine.State;
+                TargetVehicle.FlightController.CommandLoiterHold(st.PositionNed, st.AttitudeBodyToNed.ToEulerZyx().Z);
+                _lastConsoleSummary = "[Standalone C# Autopilot] Stopped Orbit Mission -> Position Hold";
+            }
+
             if (_ros2OffboardProcess == null) return;
             try
             {

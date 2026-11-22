@@ -194,15 +194,16 @@ namespace FlightDynamics6DoF.Editor
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
-            bool vmUp = Infra.VmStatus.Equals("RUNNING", StringComparison.OrdinalIgnoreCase);
-            bool cdUp = Infra.ContainerdStatus.Equals("ACTIVE", StringComparison.OrdinalIgnoreCase);
+            bool hasSitlWs = Infra.IsSitlWorkspaceAvailable;
+            bool vmUp = !hasSitlWs || Infra.VmStatus.Equals("RUNNING", StringComparison.OrdinalIgnoreCase);
+            bool cdUp = !hasSitlWs || Infra.ContainerdStatus.Equals("ACTIVE", StringComparison.OrdinalIgnoreCase);
             bool px4Up = Infra.IsContainerRunning("unity-px4-sitl");
             bool rosUp = Infra.IsContainerRunning("unity-ros2-dds");
 
-            DrawCompactBadge($"VM ({Infra.DetectedBackendName})", vmUp ? "RUNNING" : Infra.VmStatus, vmUp ? new Color(0.25f, 0.85f, 0.35f) : new Color(0.9f, 0.35f, 0.35f));
-            DrawCompactBadge("containerd", cdUp ? "ACTIVE" : Infra.ContainerdStatus, cdUp ? new Color(0.25f, 0.85f, 0.35f) : new Color(0.95f, 0.65f, 0.25f));
-            DrawCompactBadge("unity-px4-sitl", px4Up ? $"UP ({AirframeModel})" : "STOPPED", px4Up ? new Color(0.25f, 0.85f, 0.35f) : new Color(0.85f, 0.4f, 0.4f));
-            DrawCompactBadge("unity-ros2-dds", rosUp ? "UP (UDP:8888)" : "STOPPED", rosUp ? new Color(0.25f, 0.85f, 0.35f) : new Color(0.85f, 0.4f, 0.4f));
+            DrawCompactBadge($"Backend ({Infra.DetectedBackendName})", vmUp ? Infra.VmStatus : Infra.VmStatus, vmUp ? new Color(0.25f, 0.85f, 0.35f) : new Color(0.9f, 0.35f, 0.35f));
+            DrawCompactBadge(hasSitlWs ? "containerd" : "Autopilot", cdUp ? Infra.ContainerdStatus : Infra.ContainerdStatus, cdUp ? new Color(0.25f, 0.85f, 0.35f) : new Color(0.95f, 0.65f, 0.25f));
+            DrawCompactBadge("unity-px4-sitl", px4Up ? $"UP ({AirframeModel})" : (hasSitlWs ? "STOPPED" : "OPTIONAL (TCP:4560)"), px4Up ? new Color(0.25f, 0.85f, 0.35f) : (hasSitlWs ? new Color(0.85f, 0.4f, 0.4f) : new Color(0.55f, 0.75f, 0.95f)));
+            DrawCompactBadge("unity-ros2-dds", rosUp ? "UP (UDP:8888)" : (hasSitlWs ? "STOPPED" : "OPTIONAL (UDP:8888)"), rosUp ? new Color(0.25f, 0.85f, 0.35f) : (hasSitlWs ? new Color(0.85f, 0.4f, 0.4f) : new Color(0.55f, 0.75f, 0.95f)));
 
             var activeLogger = _telemetryPanel.GetActiveLogger(SceneVehicle);
             string simState = EditorApplication.isPlaying ? $"PLAY ({activeLogger.Frames.Count}f)" : $"IDLE ({activeLogger.Frames.Count}f)";

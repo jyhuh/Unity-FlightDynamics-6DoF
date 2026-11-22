@@ -18,6 +18,20 @@ namespace FlightDynamics6DoF.Editor
 
         public void Draw(SitlInfraController infra, string airframeModel, Action exportAirframeParams)
         {
+            if (!infra.IsSitlWorkspaceAvailable)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                GUILayout.Label("Standalone Built-in C# Autopilot Mode Active (Zero External Dependencies)", EditorStyles.boldLabel);
+                EditorGUILayout.HelpBox(
+                    "This project is running in Standalone Asset Store Mode. The built-in pure C# Nonlinear SO(3) Attitude, PID Position, and Fixed-Wing TECS/L1 Flight Controller runs 100% natively inside Unity (Windows, macOS, Linux) without requiring Colima, Docker, or external Linux VMs.\n\n" +
+                    "• Immediate Flight: Proceed to '3. Environment' and click '▶ Start Simulation' to fly Multirotor, Fixed-Wing, and Hybrid QuadPlane VTOL aircraft out-of-the-box.\n" +
+                    "• Optional External PX4 SITL / QGroundControl: MavlinkNetworkNode listens on TCP :4560 (for external PX4 SITL hardware-in-the-loop lockstep) and streams telemetry on UDP :14550 (for QGroundControl).\n" +
+                    "• Optional Container Manager: Place the companion 'scripts/px4-sitl.sh' and 'docker/' SITL stack in the project root to enable 1-click Colima / Apple container orchestration below.",
+                    MessageType.Info);
+                EditorGUILayout.EndVertical();
+                EditorGUILayout.Space(6);
+            }
+
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             GUILayout.Label("Step 2.1: SITL Runtime Infrastructure One-Click Controls", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(

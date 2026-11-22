@@ -120,8 +120,9 @@ namespace FlightDynamics6DoF.Unity
                 VehicleAirframeCategory.HybridQuadPlaneVtol => AircraftConfigSpec.CreateQuadPlaneVtolMillie(),
                 _ => AircraftConfigSpec.CreateStandardQuadcopterX()
             };
+            bool hasExternalSitlScript = System.IO.File.Exists(System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "scripts", "px4-sitl.sh"));
             vehicle.FidelityLevel = fidelityLevel;
-            vehicle.UseInternalFlightController = (mavlinkMode == MavlinkBridgeMode.DirectGcsAutopilot);
+            vehicle.UseInternalFlightController = (mavlinkMode == MavlinkBridgeMode.DirectGcsAutopilot) || !hasExternalSitlScript;
             vehicle.AutoArmAndTakeoffOnStart = autoTakeoff;
             vehicle.InitialTakeoffAltitudeMeters = 10.0f;
             vehicle.RunStage1AnalysisAndBake();
@@ -255,31 +256,51 @@ namespace FlightDynamics6DoF.Unity
             GUILayout.Label($"Vehicle Plant: <b>{PrimaryVehicle.ActiveConfig.AircraftName}</b> | Sim Time: {st.SimTimeSec:F2} s");
             GUILayout.Space(4);
 
-            // 1. PX4 SITL External Control Section (Primary)
-            GUILayout.Label($"<b>[1. Independent PX4 SITL Controller (TCP 4560 HIL Lockstep)]</b>");
+            // 1. Flight Control & PX4 SITL Bridge Section (Primary)
+            bool hasSitlWs = Px4Launcher != null && Px4Launcher.IsSitlWorkspaceAvailable;
+            string modeLabel = (_guiMavConnectedLatch && PrimaryMavlinkNode != null && PrimaryMavlinkNode.Bridge.TotalHilActuatorFramesReceived > 0)
+                ? "<color=#44ff66>EXTERNAL PX4 SITL (TCP :4560 Lockstep)</color>"
+                : (PrimaryVehicle.UseInternalFlightController
+                    ? "<color=#44ddff>STANDALONE C# AUTOPILOT (SO(3) / TECS)</color>"
+                    : "<color=#ffcc33>WAITING FOR PX4 SITL (TCP :4560)</color>");
+            GUILayout.Label($"<b>[1. Flight Controller & MAVLink Bridge]</b>  {modeLabel}");
             if (PrimaryMavlinkNode != null)
             {
                 var br = PrimaryMavlinkNode.Bridge;
+                bool isArmedNow = (_guiMavConnectedLatch && br.TotalHilActuatorFramesReceived > 0)
+                    ? br.IsExternalSitlArmed
+                    : (PrimaryVehicle.FlightController != null && PrimaryVehicle.FlightController.IsArmed);
                 string connStr = _guiMavConnectedLatch ? "<color=#44ff66>CONNECTED</color>" : "<color=#ffcc33>LISTENING ON TCP :4560</color>";
-                GUILayout.Label($"TCP 4560 Status: {connStr} | PX4 Armed: <b>{br.IsExternalSitlArmed}</b>");
+                GUILayout.Label($"TCP 4560 Status: {connStr} | Armed: <b>{isArmedNow}</b> | Mode: <b>{(PrimaryVehicle.FlightController != null ? PrimaryVehicle.FlightController.CurrentMode.ToString() : "HIL")}</b>");
                 GUILayout.Label($"HIL_SENSOR Sent: {br.TotalFramesSent} | HIL_ACTUATOR_CONTROLS Recv: {br.TotalHilActuatorFramesReceived}");
-                GUILayout.Label($"PX4 Motor Controls [0..3]: [{st.ActuatorControlsNormalized[0]:F2}, {st.ActuatorControlsNormalized[1]:F2}, {st.ActuatorControlsNormalized[2]:F2}, {st.ActuatorControlsNormalized[3]:F2}]");
+                GUILayout.Label($"Actuator Controls [0..3]: [{st.ActuatorControlsNormalized[0]:F2}, {st.ActuatorControlsNormalized[1]:F2}, {st.ActuatorControlsNormalized[2]:F2}, {st.ActuatorControlsNormalized[3]:F2}]");
             }
 
             if (Px4Launcher != null)
             {
-                string px4Badge = _guiPx4RunningLatch ? "<color=#44ff66>● RUNNING</color>" : "<color=#ff5555>○ STOPPED</color>";
-                GUILayout.Label($"Containers ({Px4Launcher.RuntimeBackend}): {px4Badge} | <i>{Px4Launcher.LastConsoleSummary}</i>");
-                GUILayout.BeginHorizontal();
-                if (!_guiPx4RunningLatch)
+                if (hasSitlWs)
                 {
-                    if (GUILayout.Button("Start PX4 + ROS2"))
-                        Px4Launcher.StartPx4SitlProcess();
+                    string px4Badge = _guiPx4RunningLatch ? "<color=#44ff66>● RUNNING</color>" : "<color=#ff5555>○ STOPPED</color>";
+                    GUILayout.Label($"Containers ({Px4Launcher.RuntimeBackend}): {px4Badge} | <i>{Px4Launcher.LastConsoleSummary}</i>");
                 }
                 else
                 {
-                    if (GUILayout.Button("Stop Containers"))
-                        Px4Launcher.StopPx4SitlProcess();
+                    GUILayout.Label($"Status: <i>{Px4Launcher.LastConsoleSummary}</i>");
+                }
+
+                GUILayout.BeginHorizontal();
+                if (hasSitlWs)
+                {
+                    if (!_guiPx4RunningLatch)
+                    {
+                        if (GUILayout.Button("Start PX4 + ROS2"))
+                            Px4Launcher.StartPx4SitlProcess();
+                    }
+                    else
+                    {
+                        if (GUILayout.Button("Stop Containers"))
+                            Px4Launcher.StopPx4SitlProcess();
+                    }
                 }
 
                 if (GUILayout.Button("Takeoff"))
@@ -292,17 +313,20 @@ namespace FlightDynamics6DoF.Unity
                     Px4Launcher.SendPxhCommand("commander land");
                 GUILayout.EndHorizontal();
 
-                // Colima VM & Daemon Control
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("VM Status"))
-                    Px4Launcher.CheckVmStatus();
-                GUI.backgroundColor = new Color(0.4f, 1f, 0.7f);
-                if (GUILayout.Button("Repair containerd"))
-                    Px4Launcher.RepairContainerdService();
-                GUI.backgroundColor = Color.white;
-                if (GUILayout.Button("Start VM"))
-                    Px4Launcher.StartColimaVm();
-                GUILayout.EndHorizontal();
+                if (hasSitlWs)
+                {
+                    // Colima VM & Daemon Control (Only shown when companion container workspace is installed)
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button("VM Status"))
+                        Px4Launcher.CheckVmStatus();
+                    GUI.backgroundColor = new Color(0.4f, 1f, 0.7f);
+                    if (GUILayout.Button("Repair containerd"))
+                        Px4Launcher.RepairContainerdService();
+                    GUI.backgroundColor = Color.white;
+                    if (GUILayout.Button("Start VM"))
+                        Px4Launcher.StartColimaVm();
+                    GUILayout.EndHorizontal();
+                }
 
                 // VTOL Specific Controls
                 if (PrimaryVehicle.ActiveConfig.Category == VehicleAirframeCategory.HybridQuadPlaneVtol ||
@@ -317,7 +341,7 @@ namespace FlightDynamics6DoF.Unity
                     GUILayout.EndHorizontal();
                 }
 
-                // Interactive pxh Shell Input Field (Replaces CLI Terminal)
+                // Interactive pxh Shell Input Field
                 GUILayout.BeginHorizontal();
                 GUILayout.Label("pxh>", GUILayout.Width(38));
                 _customPxhCommand = GUILayout.TextField(_customPxhCommand);
@@ -337,9 +361,9 @@ namespace FlightDynamics6DoF.Unity
                 GUILayout.EndHorizontal();
 
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button("ROS 2: Start Offboard Orbit (10m)"))
+                if (GUILayout.Button(hasSitlWs ? "ROS 2: Start Offboard Orbit (10m)" : "Start Autonomous Circular Orbit (10m)"))
                     Px4Launcher.StartRos2OffboardNode(10.0f, 8.0f);
-                if (GUILayout.Button("ROS 2: Stop Offboard Node"))
+                if (GUILayout.Button(hasSitlWs ? "ROS 2: Stop Offboard Node" : "Stop Orbit (Hold Position)"))
                     Px4Launcher.StopRos2OffboardNode();
                 GUILayout.EndHorizontal();
             }

@@ -175,11 +175,15 @@ namespace FlightDynamics6DoF.Unity
 
             if (BridgeMode == MavlinkBridgeMode.ExternalSitlHil)
             {
-                // In External SITL mode, PX4 is the sole controller; disable Unity's internal fallback controller
-                Vehicle.UseInternalFlightController = false;
-
                 // 1. Drain any already-arrived packets from PX4
                 DrainRxQueue();
+
+                // When an external PX4 SITL is actively connected and sending HIL_ACTUATOR_CONTROLS,
+                // PX4 acts as the sole controller; when disconnected, preserve UseInternalFlightController for Standalone C# mode.
+                if (IsConnected && _bridge.TotalHilActuatorFramesReceived > 0)
+                {
+                    Vehicle.UseInternalFlightController = false;
+                }
 
                 // 2. Send current environment sensor state (HIL_SENSOR, HIL_STATE_QUATERNION, HIL_GPS) to PX4
                 if (IsConnected)
