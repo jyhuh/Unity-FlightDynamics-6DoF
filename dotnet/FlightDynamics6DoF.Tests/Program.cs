@@ -503,6 +503,36 @@ namespace FlightDynamics6DoF.Tests
             reloaded.MaxFrames = 50;
             reloaded.EnforceMaxFrames();
             AssertTrue(reloaded.Frames.Count == 50, $"EnforceMaxFrames capped frame buffer to 50 (got {reloaded.Frames.Count})");
+
+            // Verify Standalone C# Circular Orbit & VTOL Transition modes (Zero external SITL dependency)
+            var vtolSpec = AircraftConfigSpec.CreateQuadPlaneVtolMillie();
+            var vtolDb = StabilityAndTrimAnalyzer.AnalyzeAndBake(vtolSpec);
+            var vtolEngine = new MultiFidelitySixDofEngine(vtolSpec, vtolDb) { FidelityLevel = SimulationFidelityLevel.Level2_6DoFBladeAndStrip };
+            var vtolCtrl = new CascadedFlightController();
+            vtolCtrl.ApplyParameterTable(AirframeControlParameterTable.CreateForCategory(vtolSpec.Category, vtolSpec, vtolDb));
+            vtolCtrl.CommandCircularOrbit(Vec3d.Zero, 12.0, 10.0, 12);
+            AssertTrue(vtolCtrl.IsArmed && vtolCtrl.CurrentMode == AutopilotFlightMode.WaypointMission && vtolCtrl.LoopMissionWaypoints, "Circular orbit arms and enables looping waypoint mission");
+            AssertTrue(vtolCtrl.MissionWaypoints.Count == 12, "Circular orbit generates requested waypoint segment count");
+
+            vtolEngine.ResetState(Vec3d.Zero, Quatd.Identity);
+            vtolCtrl.CommandTakeoff(Vec3d.Zero, 0.0, 12.0);
+            for (int i = 0; i < 750; i++)
+            {
+                vtolCtrl.ComputeControlStep(0.004, vtolSpec, vtolDb, vtolEngine.State, u16);
+                vtolEngine.SetActuatorControls(u16);
+                vtolEngine.StepSimulation(0.004);
+            }
+            vtolCtrl.CommandVtolTransition(true, vtolEngine.State.PositionNed, 0.0);
+            for (int i = 0; i < 750; i++)
+            {
+                vtolCtrl.ComputeControlStep(0.004, vtolSpec, vtolDb, vtolEngine.State, u16);
+                vtolEngine.SetActuatorControls(u16);
+                vtolEngine.StepSimulation(0.004);
+            }
+            AssertTrue(!double.IsNaN(vtolEngine.State.AltitudeAglMeters) && vtolEngine.State.AltitudeAglMeters > 5.0, $"QuadPlane VTOL standalone transition climbs cleanly (Alt={vtolEngine.State.AltitudeAglMeters:F2}m)");
+            AssertTrue(vtolCtrl.IsVtolFixedWingCruiseActive && vtolEngine.State.AirspeedMps > 3.0, $"QuadPlane VTOL builds forward airspeed in transition (V={vtolEngine.State.AirspeedMps:F2}m/s)");
+            vtolCtrl.CommandLoiterHold(new Vec3d(5, -5, -15), 0.25);
+            AssertTrue(vtolCtrl.CurrentMode == AutopilotFlightMode.PositionHoldNed, "CommandLoiterHold switches back to PositionHoldNed");
         }
     }
 }

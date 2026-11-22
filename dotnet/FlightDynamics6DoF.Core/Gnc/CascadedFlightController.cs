@@ -85,6 +85,8 @@ namespace FlightDynamics6DoF.Core.Gnc
 
         public IReadOnlyList<MissionWaypointNed> MissionWaypoints => _missionWaypoints;
         public int ActiveWaypointIndex => _activeWaypointIndex;
+        public bool LoopMissionWaypoints { get; set; } = false;
+        public bool IsVtolFixedWingCruiseActive { get; set; } = false;
 
         public AirframeControlParameterTable ParameterTable { get; private set; } =
             AirframeControlParameterTable.CreateMultirotorDefault();
@@ -156,19 +158,79 @@ namespace FlightDynamics6DoF.Core.Gnc
         public void CommandTakeoff(Vec3d currentPosNed, double currentYawRad, double altitudeAglMeters = 10.0)
         {
             IsArmed = true;
+            IsVtolFixedWingCruiseActive = false;
             CurrentMode = AutopilotFlightMode.PositionHoldNed;
             TargetPositionNed = new Vec3d(currentPosNed.X, currentPosNed.Y, -System.Math.Abs(altitudeAglMeters));
             TargetYawRad = currentYawRad;
         }
 
+        public void CommandLoiterHold(Vec3d currentPosNed, double currentYawRad)
+        {
+            IsArmed = true;
+            CurrentMode = AutopilotFlightMode.PositionHoldNed;
+            double holdZ = currentPosNed.Z < -1.5 ? currentPosNed.Z : -10.0;
+            TargetPositionNed = new Vec3d(currentPosNed.X, currentPosNed.Y, holdZ);
+            TargetYawRad = currentYawRad;
+        }
+
+        public void CommandCircularOrbit(Vec3d centerNed, double altitudeAglMeters = 10.0, double radiusMeters = 8.0, int numSegments = 16)
+        {
+            IsArmed = true;
+            int count = System.Math.Max(8, numSegments);
+            double r = System.Math.Max(2.0, radiusMeters);
+            double z = -System.Math.Max(2.0, System.Math.Abs(altitudeAglMeters));
+            _missionWaypoints.Clear();
+            for (int i = 0; i < count; i++)
+            {
+                double theta = (2.0 * System.Math.PI * i) / count;
+                double nextTheta = (2.0 * System.Math.PI * (i + 1)) / count;
+                double wx = centerNed.X + r * System.Math.Cos(theta);
+                double wy = centerNed.Y + r * System.Math.Sin(theta);
+                double nx = centerNed.X + r * System.Math.Cos(nextTheta);
+                double ny = centerNed.Y + r * System.Math.Sin(nextTheta);
+                _missionWaypoints.Add(new MissionWaypointNed
+                {
+                    PositionNed = new Vec3d(wx, wy, z),
+                    YawRad = System.Math.Atan2(ny - wy, nx - wx),
+                    AcceptanceRadiusMeters = System.Math.Max(1.8, r * 0.28),
+                    HoldTimeSec = 0.0
+                });
+            }
+            _activeWaypointIndex = 0;
+            LoopMissionWaypoints = true;
+            CurrentMode = AutopilotFlightMode.WaypointMission;
+        }
+
+        public void CommandVtolTransition(bool toFixedWing, Vec3d currentPosNed, double currentYawRad)
+        {
+            IsArmed = true;
+            IsVtolFixedWingCruiseActive = toFixedWing;
+            double z = System.Math.Min(currentPosNed.Z, -12.0);
+            if (toFixedWing)
+            {
+                CommandCircularOrbit(new Vec3d(currentPosNed.X, currentPosNed.Y, z), -z, 35.0, 16);
+            }
+            else
+            {
+                LoopMissionWaypoints = false;
+                CurrentMode = AutopilotFlightMode.PositionHoldNed;
+                TargetPositionNed = new Vec3d(currentPosNed.X, currentPosNed.Y, z);
+                TargetYawRad = currentYawRad;
+            }
+        }
+
         public void CommandReturnToLaunch()
         {
+            IsVtolFixedWingCruiseActive = false;
+            LoopMissionWaypoints = false;
             CurrentMode = AutopilotFlightMode.ReturnToLaunch;
             TargetPositionNed = new Vec3d(0.0, 0.0, System.Math.Min(TargetPositionNed.Z, -15.0));
         }
 
         public void CommandAutoLand(Vec3d currentPosNed)
         {
+            IsVtolFixedWingCruiseActive = false;
+            LoopMissionWaypoints = false;
             CurrentMode = AutopilotFlightMode.AutoLand;
             TargetPositionNed = new Vec3d(currentPosNed.X, currentPosNed.Y, 0.0);
         }
@@ -198,7 +260,8 @@ namespace FlightDynamics6DoF.Core.Gnc
             double mass = System.Math.Max(0.1, config.MassKg);
             double gravity = IsaAtmosphereAndTurbulence.GravityMps2;
 
-            // Fixed-Wing / Hybrid VTOL Forward Cruise Transition handling
+            // Pure Fixed-Wing uses the 3-phase runway & TECS/L1 controller;
+            // HybridQuadPlaneVtol uses the unified SO(3) + forward cruise thrust allocator below.
             if (config.Category == VehicleAirframeCategory.FixedWing)
             {
                 ComputeFixedWingControl(dt, config, db, state, outControls16);
@@ -291,8 +354,10 @@ namespace FlightDynamics6DoF.Core.Gnc
                 scaleY * (KpRateRollPitch * rateErr.Y + KiRateRollPitch * _rateIntegralFrd.Y + KdRateRollPitch * rateDeriv.Y),
                 scaleZ * (KpRateYaw * rateErr.Z + KiRateYaw * _rateIntegralFrd.Z)) + gyroFeedforward;
 
-            double forwardThrottle = (config.Category == VehicleAirframeCategory.HybridQuadPlaneVtol && velDesNed.Magnitude > 5.0)
-                ? System.Math.Min(0.85, velDesNed.Magnitude / System.Math.Max(10.0, config.DesignCruiseSpeedMps))
+            double forwardThrottle = (config.Category == VehicleAirframeCategory.HybridQuadPlaneVtol || config.Category == VehicleAirframeCategory.TiltRotorVtol)
+                ? (IsVtolFixedWingCruiseActive
+                    ? 0.65
+                    : (velDesNed.Magnitude > 5.0 ? System.Math.Min(0.75, velDesNed.Magnitude / System.Math.Max(10.0, config.DesignCruiseSpeedMps)) : 0.0))
                 : 0.0;
 
             WrenchControlAllocator.AllocateActuators(
@@ -434,9 +499,12 @@ namespace FlightDynamics6DoF.Core.Gnc
 
                 double dist = (state.PositionNed - wp.PositionNed).Magnitude;
                 double radius = System.Math.Max(1.0, wp.AcceptanceRadiusMeters);
-                if (dist <= radius && _activeWaypointIndex < _missionWaypoints.Count - 1)
+                if (dist <= radius)
                 {
-                    _activeWaypointIndex++;
+                    if (_activeWaypointIndex < _missionWaypoints.Count - 1)
+                        _activeWaypointIndex++;
+                    else if (LoopMissionWaypoints)
+                        _activeWaypointIndex = 0;
                 }
             }
             else if (CurrentMode == AutopilotFlightMode.ReturnToLaunch)
